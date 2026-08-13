@@ -7,10 +7,14 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.webnexis.matchr",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "googleServicesFile": "./google-services.json",
       "package": "com.webnexis.matchr",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -22,6 +26,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "30dd21ae-c95f-4436-9c2d-58ab7857bb7d"
+      }
+    },
+    "owner": "vedansh_8125"
   }
 }
