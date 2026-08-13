@@ -1,0 +1,327 @@
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { type User } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
+
+import { supabase } from '../supabase';
+import { syncUser, updateMyProfile, uploadImage } from '../api';
+import api from '../api/client';
+import { socketService } from '../api/socket';
+
+// Onboarding data shape
+export interface OnboardingData {
+  currentStep: string;
+  role: 'Brand' | 'Influencer' | null;
+  name: string;
+  dob: string;
+  gender: string;
+  platforms: string[];
+  categories: string[];
+  location: { name: string; lat: number; lng: number } | null;
+  bio: string;
+  photos: string[];
+  packages: any[];
+  // Brand-specific
+  logo: string;
+  campaigns: string[];
+  website?: string;
+}
+
+const DEFAULT_ONBOARDING: OnboardingData = {
+  currentStep: 'role_selection',
+  role: null,
+  name: '',
+  dob: '',
+  gender: '',
+  platforms: [],
+  categories: [],
+  location: null,
+  bio: '',
+  photos: [],
+  packages: [],
+  logo: '',
+  campaigns: [],
+  website: '',
+};
+
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+  onboardingData: OnboardingData | null;
+  onboardingComplete: boolean;
+  // Auth methods
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
+  signOut: () => Promise<void>;
+  // Onboarding methods
+  updateOnboarding: (data: Partial<OnboardingData>) => Promise<void>;
+  completeOnboarding: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return ctx;
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+
+  // Listen to auth state changes
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchUserData(session.user);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        // Connect globally so banners and notifications work everywhere
+        socketService.connect();
+
+        // Fix 3: Update socket token on every auth state change (handles hourly JWT refresh)
+        if (session?.access_token) {
+          socketService.updateToken(session.access_token);
+        }
+        await fetchUserData(currentUser);
+      } else {
+        // Disconnect socket on sign-out
+        socketService.disconnect();
+        setOnboardingData(null);
+        setOnboardingComplete(false);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const fetchUserData = async (currentUser: User) => {
+    try {
+      // First ensure the user is synced in the backend DB
+      try {
+        await syncUser();
+      } catch (err) {
+        // Network failure (backend down) — warn and continue.
+        // The user is still authenticated via Supabase; we just can't reach our custom API.
+        console.warn('[API] syncUser failed (backend may be offline):', (err as any)?.message ?? err);
+      }
+
+      // Fetch user profile and onboarding state from Backend
+      const [dbUser, onboardingProgress] = await Promise.all([
+        api.get<any>('/api/auth/me').catch(() => null),
+        api.get<any>('/api/auth/onboarding').catch(() => null)
+      ]);
+
+      if (dbUser) {
+        setOnboardingComplete(!!dbUser.role);
+      } else {
+        // dbUser is null — could be a ghost user OR the backend is simply offline.
+        // Only attempt self-healing if the previous syncUser didn't throw a network error.
+        console.warn('[Auth] dbUser not found. Attempting self-healing sync...');
+        try {
+          await syncUser();
+          const healedUser = await api.get<any>('/api/auth/me').catch(() => null);
+          setOnboardingComplete(!!healedUser?.role);
+        } catch (healErr: any) {
+          const isNetworkError = healErr?.message?.includes('fetch') || healErr?.message?.includes('network') || healErr?.message?.includes('ECONNREFUSED');
+          if (isNetworkError) {
+            // Backend is offline — don't block the user, just show onboarding
+            console.warn('[Auth] Backend unreachable. Continuing with default onboarding state.');
+          } else {
+            console.error('[Auth] Self-healing sync failed:', healErr);
+          }
+          setOnboardingComplete(false);
+        }
+      }
+
+      if (onboardingProgress && Object.keys(onboardingProgress).length > 0) {
+        setOnboardingData({ ...DEFAULT_ONBOARDING, ...onboardingProgress });
+      } else {
+        setOnboardingData({ ...DEFAULT_ONBOARDING });
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      setOnboardingData({ ...DEFAULT_ONBOARDING });
+      setOnboardingComplete(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- Auth methods ---
+
+  const signInWithEmail = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    try { await syncUser(); } catch (e) { console.warn('[API] syncUser on sign-in failed:', e); }
+  };
+
+  const signUpWithEmail = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+    try { await syncUser(); } catch (e) { console.warn('[API] syncUser on sign-up failed:', e); }
+  };
+
+  const signInWithGoogle = async () => {
+    if (Platform.OS === 'web') {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin }
+      });
+      if (error) throw error;
+    } else {
+      console.warn('Google Sign-In on native requires additional setup. See Supabase docs.');
+      throw new Error('Google Sign-In is not yet configured for native. Please use email/password.');
+    }
+  };
+
+  const signInWithApple = async () => {
+    if (Platform.OS === 'web') {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: { redirectTo: window.location.origin }
+      });
+      if (error) throw error;
+    } else {
+      console.warn('Apple Sign-In on native requires additional setup. See Supabase docs.');
+      throw new Error('Apple Sign-In is not yet configured for native. Please use email/password.');
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.warn('Supabase signout returned an error:', error.message);
+      }
+    } catch (e) {
+      console.warn('Error during sign out:', e);
+    }
+  };
+
+  // --- Onboarding methods ---
+
+  const updateOnboarding = async (data: Partial<OnboardingData>) => {
+    if (!user) return;
+
+    const newData = { ...onboardingData, ...data } as OnboardingData;
+    setOnboardingData(newData);
+
+    try {
+      // Save onboarding progress via API
+      await api.put('/api/auth/onboarding', newData);
+    } catch (error) {
+      console.error('Error saving onboarding progress:', error);
+    }
+  };
+
+  const completeOnboarding = async () => {
+    if (!user) return;
+
+    try {
+      // 1. Sync role into PostgreSQL users table
+      const role = onboardingData?.role?.toLowerCase() as 'brand' | 'influencer' | undefined;
+      
+      try {
+        await api.post('/api/auth/sync', { role });
+      } catch (e) {
+        console.warn('[API] syncUser on complete failed:', e);
+      }
+
+      // 2. Push profile fields into PostgreSQL
+      if (onboardingData && role) {
+        try {
+          // Upload logo if necessary
+          let finalLogo = onboardingData.logo;
+          if (finalLogo && (finalLogo.startsWith('file://') || finalLogo.startsWith('blob:'))) {
+            try { finalLogo = await uploadImage(finalLogo); } 
+            catch (e) { console.warn('[API] upload logo failed:', e); }
+          }
+
+          // Upload photos if necessary
+          const finalPhotos = [];
+          for (const uri of (onboardingData.photos || [])) {
+            if (uri && (uri.startsWith('file://') || uri.startsWith('blob:'))) {
+              try { finalPhotos.push(await uploadImage(uri)); } 
+              catch (e) { console.warn('[API] upload photo failed:', e); finalPhotos.push(uri); }
+            } else {
+              finalPhotos.push(uri);
+            }
+          }
+
+          if (role === 'brand') {
+            await updateMyProfile({
+              name:           onboardingData.name       || undefined,
+              bio:            onboardingData.bio        || undefined,
+              logo_url:       finalLogo                 || undefined,
+              photos:         finalPhotos.length ? finalPhotos : undefined,
+              categories:     onboardingData.categories?.length ? onboardingData.categories : undefined,
+              campaign_types: onboardingData.campaigns?.length  ? onboardingData.campaigns  : undefined,
+              platforms:      onboardingData.platforms?.length  ? onboardingData.platforms  : undefined,
+              location:       onboardingData.location?.name     || undefined,
+              lat:            onboardingData.location?.lat      ?? undefined,
+              lng:            onboardingData.location?.lng      ?? undefined,
+              website:        onboardingData.website             || undefined,
+            });
+          } else {
+            await updateMyProfile({
+              name:       onboardingData.name         || undefined,
+              bio:        onboardingData.bio          || undefined,
+              avatar_url: finalPhotos[0]              || undefined,
+              photos:     finalPhotos.length ? finalPhotos : undefined,
+              categories: onboardingData.categories?.length ? onboardingData.categories : undefined,
+              platforms:  onboardingData.platforms?.length  ? onboardingData.platforms  : undefined,
+              gender:     onboardingData.gender       || undefined,
+              location:   onboardingData.location?.name    || undefined,
+              lat:        onboardingData.location?.lat     ?? undefined,
+              lng:        onboardingData.location?.lng     ?? undefined,
+            });
+          }
+        } catch (e) {
+          console.warn('[API] updateMyProfile on complete failed:', e);
+        }
+      }
+
+      setOnboardingComplete(true);
+    } catch (error) {
+      console.error('Error completing onboarding:', error);
+    }
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        onboardingData,
+        onboardingComplete,
+        signInWithEmail,
+        signUpWithEmail,
+        signInWithGoogle,
+        signInWithApple,
+        signOut,
+        updateOnboarding,
+        completeOnboarding,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
