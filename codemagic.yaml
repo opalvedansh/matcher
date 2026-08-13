@@ -1,0 +1,36 @@
+workflows:
+  react-native-ios:
+    name: React Native iOS (Expo)
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      node: latest
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install dependencies
+        script: npm install
+      - name: Generate native iOS project (Expo Prebuild)
+        script: npx expo prebuild --platform ios
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios
+          pod install
+      - name: Build iOS app
+        script: |
+          # Codemagic CLI tool to build the IPA. 
+          # Note: Code signing is not fully configured here yet. You will need to set up 
+          # App Store Connect API keys in the Codemagic dashboard for code signing.
+          xcode-project build-ipa \
+            --workspace ios/matchr.xcworkspace \
+            --scheme matchr
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      email:
+        recipients:
+          - apps@zepwash.com
+        notify:
+          success: true
+          failure: false
