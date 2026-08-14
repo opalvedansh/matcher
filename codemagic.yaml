@@ -9,7 +9,7 @@ workflows:
       cocoapods: default
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.webnexis.mymatcher
+        bundle_identifier: com.webnexis.mymatcher1
     scripts:
       - name: Install dependencies
         script: npm install
