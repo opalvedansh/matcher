@@ -17,6 +17,8 @@ jest.mock('../src/config/db', () => ({
 jest.mock('../src/services/notificationService', () => ({
   sendNotification: jest.fn().mockResolvedValue(),
   sendMatchNotification: jest.fn().mockResolvedValue(),
+  sendMatchNotifications: jest.fn().mockResolvedValue(),
+  sendBulkNotifications: jest.fn().mockResolvedValue(),
   sendChatNotification: jest.fn().mockResolvedValue(),
 }));
 

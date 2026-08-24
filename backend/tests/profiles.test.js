@@ -24,6 +24,11 @@ jest.mock('../src/middleware/auth', () => ({
   },
 }));
 
+jest.mock('../src/middlewares/cacheMiddleware', () => ({
+  cache: () => (req, res, next) => next(),
+  invalidateCache: jest.fn().mockResolvedValue(),
+}));
+
 jest.mock('../src/socket', () => ({
   initSocket: jest.fn(),
   getIO: jest.fn(() => ({ to: jest.fn().mockReturnThis(), emit: jest.fn() })),
@@ -51,7 +56,7 @@ describe('Profile Routes', () => {
     jest.clearAllMocks();
   });
 
-  describe('GET /api/profiles/', () => {
+  describe('GET /api/profiles/me', () => {
     it('should return the current user profile', async () => {
       const mockProfile = {
         user_id: 'test-user-id-123',
@@ -63,28 +68,31 @@ describe('Profile Routes', () => {
       };
       db.query.mockResolvedValueOnce({ rows: [mockProfile] });
 
-      const res = await request(server).get('/api/profiles/');
+      const res = await request(server).get('/api/profiles/me');
 
       expect(res.status).toBe(200);
       expect(res.body.name).toBe('Test Brand');
     });
 
     it('should return 404 if profile does not exist', async () => {
+      // First query returns empty (no profile), second is the INSERT, third is the re-fetch
+      db.query.mockResolvedValueOnce({ rows: [] });
+      db.query.mockResolvedValueOnce({ rowCount: 1 });
       db.query.mockResolvedValueOnce({ rows: [] });
 
-      const res = await request(server).get('/api/profiles/');
+      const res = await request(server).get('/api/profiles/me');
 
       expect(res.status).toBe(404);
     });
   });
 
-  describe('PUT /api/profiles/', () => {
+  describe('PUT /api/profiles/me', () => {
     it('should update profile with valid data', async () => {
       db.query.mockResolvedValueOnce({ rowCount: 1 }); // UPDATE
       db.query.mockResolvedValueOnce({ rows: [{ user_id: 'test-user-id-123', name: 'Updated Brand' }] }); // re-fetch
 
       const res = await request(server)
-        .put('/api/profiles/')
+        .put('/api/profiles/me')
         .send({ name: 'Updated Brand', budget_min: 2000 });
 
       expect(res.status).toBe(200);
@@ -93,7 +101,7 @@ describe('Profile Routes', () => {
 
     it('should reject non-numeric budget_min with 422', async () => {
       const res = await request(server)
-        .put('/api/profiles/')
+        .put('/api/profiles/me')
         .send({ budget_min: 'not-a-number' });
 
       expect(res.status).toBe(422);
@@ -101,7 +109,7 @@ describe('Profile Routes', () => {
 
     it('should reject non-numeric lat/lng with 422', async () => {
       const res = await request(server)
-        .put('/api/profiles/')
+        .put('/api/profiles/me')
         .send({ lat: 'abc', lng: 'xyz' });
 
       expect(res.status).toBe(422);

@@ -10,10 +10,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
-import { useState } from 'react';
-
+import { useState, useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import { useSocketStatus } from '@/hooks/useSocketStatus';
 
 import { colors } from '@/theme/colors';
@@ -23,39 +24,24 @@ import { ChatScreen } from '@/screens/main/shared/ChatScreen';
 import { LikesScreen } from '@/screens/main/shared/LikesScreen';
 import { InfluencerProfileScreen } from '@/screens/main/influencer/InfluencerProfileScreen';
 import { BrandProfileScreen } from '@/screens/main/brand/BrandProfileScreen';
-import { useEffect } from 'react';
-import * as ImagePicker from 'expo-image-picker';
-import { getFeedStories, uploadStory } from '@/api';
-import { StoryViewer } from '@/components/StoryViewer';
 
-const POSTS = [
-  {
-    id: '1',
-    brandName: 'mama.earth',
-    brandLogo: 'https://picsum.photos/id/102/50/50',
-    category: 'Lifestyle',
-    postImage: 'https://picsum.photos/id/1012/600/800',
-    likes: '1,139',
-    shares: '128',
-    isVerified: true,
-  },
-  {
-    id: '2',
-    brandName: 'ER404.studio',
-    brandLogo: 'https://picsum.photos/id/103/50/50',
-    category: 'Fashion & Lifestyle',
-    postImage: 'https://picsum.photos/id/1014/600/800',
-    likes: '8,432',
-    shares: '421',
-    isVerified: true,
-  },
-];
+import * as ImagePicker from 'expo-image-picker';
+import { getFeedStories } from '@/api';
+import { StoryViewer } from '@/components/StoryViewer';
+import { PostCard, Post } from '@/components/PostCard';
+import api from '@/api/client';
+
 
 export function DashboardScreen() {
+  const router = useRouter();
   const [stories, setStories] = useState<any[]>([]);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsRefreshing, setPostsRefreshing] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
 
   const fetchStories = async () => {
     try {
@@ -66,40 +52,55 @@ export function DashboardScreen() {
     }
   };
 
+  const fetchPosts = async (refresh = false) => {
+    try {
+      if (refresh) setPostsRefreshing(true);
+      else setPostsLoading(true);
+      const res = await api.get('/api/posts/feed') as any;
+      setPosts(res.data?.posts || res.posts || []);
+    } catch (e) {
+      console.log('Failed to fetch posts', e);
+    } finally {
+      setPostsLoading(false);
+      setPostsRefreshing(false);
+    }
+  };
+
+  const handleLikeToggle = (postId: string, liked: boolean, newCount: number) => {
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, liked_by_me: liked, likes_count: newCount } : p));
+  };
+
   useEffect(() => {
     fetchStories();
+    fetchPosts();
   }, []);
 
-  const handleAddStory = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.5,
-      base64: true,
-    });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const newUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      try {
-        await uploadStory(newUri);
-        fetchStories();
-      } catch (err) {
-        console.error('Failed to upload story', err);
-      }
-    }
+  const handleAddStory = () => {
+    setShowAddMenu(false);
+    setTimeout(() => router.push('/story-camera'), 200);
+  };
+
+  const handleAddPost = () => {
+    setShowAddMenu(false);
+    setTimeout(() => router.push('/create-post'), 200);
   };
 
   const renderStory = ({ item, index }: { item: any; index: number }) => {
     return (
-      <Pressable style={styles.storyContainer} onPress={() => {
-        if (item.isMe && (!item.items || item.items.length === 0)) {
-          handleAddStory();
-        } else {
-          setSelectedGroupIndex(index);
-          setViewerVisible(true);
-        }
-      }}>
+      <Pressable
+        style={styles.storyContainer}
+        onPress={() => {
+          if (item.isMe) {
+            // Always show the action sheet for the user's own story bubble
+            setShowAddMenu(true);
+          } else {
+            setSelectedGroupIndex(index);
+            setViewerVisible(true);
+          }
+        }}
+      >
         <LinearGradient
-          colors={item.isMe ? ['#00FF00', '#009900'] : ['#FF4500', '#FF8C00']}
+          colors={item.isMe ? ['#FF4500', '#FF8C00'] : ['#FF4500', '#FF8C00']}
           style={styles.storyRing}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -109,7 +110,14 @@ export function DashboardScreen() {
           </View>
         </LinearGradient>
         {item.isMe && (
-          <Pressable style={styles.addStoryButton} onPress={handleAddStory}>
+          <Pressable
+            style={styles.addStoryButton}
+            onPress={(e) => {
+              // Stop propagation so the outer Pressable doesn't also fire
+              e.stopPropagation?.();
+              setShowAddMenu(true);
+            }}
+          >
             <AntDesign name="plus" size={14} color="#FFF" />
           </Pressable>
         )}
@@ -120,59 +128,7 @@ export function DashboardScreen() {
     );
   };
 
-  const renderPost = ({ item }: { item: typeof POSTS[0] }) => {
-    return (
-      <View style={styles.postContainer}>
-        <Image source={{ uri: item.postImage }} style={styles.postImage} />
-        
-        {/* Black shadow gradient at the top of the card */}
-        <LinearGradient
-          colors={['rgba(0,0,0,0.72)', 'rgba(0,0,0,0.28)', 'transparent']}
-          style={styles.postHeaderShadow}
-        />
 
-        {/* Post Header Overlay */}
-        <View style={styles.postHeader}>
-          <Image source={{ uri: item.brandLogo }} style={styles.postBrandLogo} />
-          <View style={styles.postBrandInfo}>
-            <View style={styles.postBrandNameRow}>
-              <Text style={styles.postBrandName}>{item.brandName}</Text>
-              {item.isVerified && (
-                <MaterialCommunityIcons name="check-decagram" size={16} color="#1DA1F2" style={{ marginLeft: 4 }} />
-              )}
-            </View>
-            <Text style={styles.postCategory}>{item.category}</Text>
-          </View>
-        </View>
-
-        {/* Glass blend container — blur/tint fades in gradually from top */}
-        <View style={styles.glassContainer}>
-          <BlurView 
-            intensity={40} 
-            tint="dark" 
-            style={StyleSheet.absoluteFill} 
-          />
-          {/* Frosted tint gradient */}
-          <LinearGradient
-            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.05)']}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          {/* Stats row pinned to the bottom of the glass zone */}
-          <View style={styles.statsContent}>
-            <View style={styles.postStat}>
-              <AntDesign name="heart" size={22} color="#FF3B30" />
-              <Text style={styles.postStatText}>{item.likes}</Text>
-            </View>
-            <View style={styles.postStat}>
-              <Ionicons name="paper-plane-outline" size={24} color="#FFF" />
-              <Text style={styles.postStatText}>{item.shares}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  };
 
   const ListHeader = () => (
     <View style={styles.header}>
@@ -184,6 +140,16 @@ export function DashboardScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.storiesContent}
       />
+      {/* Divider */}
+      <View style={styles.feedDivider} />
+    </View>
+  );
+
+  const ListEmpty = () => (
+    <View style={styles.emptyFeed}>
+      <Ionicons name="images-outline" size={48} color="#333" />
+      <Text style={styles.emptyFeedTitle}>No posts yet</Text>
+      <Text style={styles.emptyFeedSub}>Be the first to share something!</Text>
     </View>
   );
 
@@ -201,12 +167,22 @@ export function DashboardScreen() {
       ) : activeTab === 'home' ? (
         <SafeAreaView style={{ flex: 1 }}>
           <FlatList
-            data={POSTS}
-            renderItem={renderPost}
+            data={posts}
+            renderItem={({ item }) => (
+              <PostCard
+                post={item}
+                onLikeToggle={handleLikeToggle}
+                onViewProfile={(id) => setViewingProfileId(id)}
+              />
+            )}
             keyExtractor={(item) => item.id}
             ListHeaderComponent={ListHeader}
+            ListEmptyComponent={postsLoading ? null : ListEmpty}
             contentContainerStyle={styles.feedContent}
             showsVerticalScrollIndicator={false}
+            onRefresh={() => fetchPosts(true)}
+            refreshing={postsRefreshing}
+            ItemSeparatorComponent={() => <View style={styles.postSeparator} />}
           />
         </SafeAreaView>
       ) : activeTab === 'match' ? (
@@ -258,6 +234,61 @@ export function DashboardScreen() {
         initialGroupIndex={selectedGroupIndex}
         onClose={() => setViewerVisible(false)}
       />
+
+      {/* ── Add Content Action Sheet (absolute overlay — works on web + native) ── */}
+      {showAddMenu && (
+        <View style={addMenuStyles.overlay}>
+          {/* Dark backdrop */}
+          <Pressable style={addMenuStyles.backdrop} onPress={() => setShowAddMenu(false)} />
+
+          {/* Sheet panel */}
+          <View style={addMenuStyles.sheet}>
+            {/* Handle bar */}
+            <View style={addMenuStyles.handle} />
+
+            <Text style={addMenuStyles.title}>Create</Text>
+
+            {/* Add Story */}
+            <TouchableOpacity style={addMenuStyles.option} onPress={handleAddStory} activeOpacity={0.8}>
+              <LinearGradient
+                colors={['#FF4500', '#FF8C00']}
+                style={addMenuStyles.iconGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="camera" size={24} color="#FFF" />
+              </LinearGradient>
+              <View style={addMenuStyles.optionText}>
+                <Text style={addMenuStyles.optionTitle}>Add Story</Text>
+                <Text style={addMenuStyles.optionDesc}>Share a photo or video for 24 hours</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#555" />
+            </TouchableOpacity>
+
+            {/* Add Post */}
+            <TouchableOpacity style={addMenuStyles.option} onPress={handleAddPost} activeOpacity={0.8}>
+              <LinearGradient
+                colors={['#6C63FF', '#A855F7']}
+                style={addMenuStyles.iconGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="grid" size={22} color="#FFF" />
+              </LinearGradient>
+              <View style={addMenuStyles.optionText}>
+                <Text style={addMenuStyles.optionTitle}>Add Post</Text>
+                <Text style={addMenuStyles.optionDesc}>Share a permanent post to your profile</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#555" />
+            </TouchableOpacity>
+
+            {/* Cancel */}
+            <TouchableOpacity style={addMenuStyles.cancel} onPress={() => setShowAddMenu(false)} activeOpacity={0.7}>
+              <Text style={addMenuStyles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -320,8 +351,31 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   feedContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 100, // Space for bottom nav
+    paddingBottom: 100,
+  },
+  feedDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginHorizontal: 16,
+  },
+  postSeparator: {
+    height: 8,
+    backgroundColor: '#0A0A0A',
+  },
+  emptyFeed: {
+    alignItems: 'center',
+    paddingTop: 60,
+    gap: 10,
+  },
+  emptyFeedTitle: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  emptyFeedSub: {
+    color: '#555',
+    fontSize: 14,
   },
   postContainer: {
     width: '100%',
@@ -460,3 +514,85 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 });
+
+const addMenuStyles = StyleSheet.create({
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  sheet: {
+    backgroundColor: '#1A1A1A',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    paddingTop: 12,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 20,
+    letterSpacing: -0.3,
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#242424',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    gap: 14,
+  },
+  iconGradient: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionText: {
+    flex: 1,
+  },
+  optionTitle: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 3,
+  },
+  optionDesc: {
+    color: '#888',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  cancel: {
+    marginTop: 4,
+    paddingVertical: 16,
+    alignItems: 'center',
+    backgroundColor: '#242424',
+    borderRadius: 16,
+  },
+  cancelText: {
+    color: '#FF4500',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
+

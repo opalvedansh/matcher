@@ -3,7 +3,8 @@ const { param, body } = require('express-validator');
 const validate = require('../middleware/validate');
 const { authenticate } = require('../middleware/auth');
 const { cache } = require('../middlewares/cacheMiddleware');
-const { getMyProfile, updateMyProfile, getProfileById } = require('../controllers/profileController');
+const { getMyProfile, updateMyProfile, getProfileById, verifyFace, syncInstagram, searchInstagram } = require('../controllers/profileController');
+const { requireRole } = require('../middleware/auth');
 
 const profileRules = [
   body('name').optional().isString().trim(),
@@ -23,8 +24,12 @@ const userIdRules = [
   param('userId').isString().notEmpty().withMessage('userId is required')
 ];
 
-// All profile routes require authentication
+// ─── Public route: no auth needed ───
+router.get('/search-instagram', searchInstagram);
+
+// All other profile routes require authentication
 router.use(authenticate);
+
 
 /**
  * @swagger
@@ -40,6 +45,8 @@ router.use(authenticate);
  */
 router.get ('/me',          getMyProfile);
 router.put ('/me',          profileRules, validate, updateMyProfile);
+router.post('/verify-face', verifyFace);
+router.post('/sync-instagram', requireRole('influencer'), syncInstagram);
 /**
  * @swagger
  * /api/profiles/{userId}:

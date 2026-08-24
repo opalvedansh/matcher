@@ -25,11 +25,11 @@ fetchBreaker.on('close', () => console.warn(`[CircuitBreaker] Maps API circuit C
 
 router.get('/autocomplete', authenticate, async (req, res, next) => {
   try {
-    const { input, types, key } = req.query;
-    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || key;
+    const { input, types } = req.query;
+    const apiKey = process.env.GOOGLE_MAPS_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
     
     if (!apiKey) {
-      return res.status(400).json({ error: 'API key is required' });
+      return res.status(500).json({ error: 'Maps API key is not configured on the server' });
     }
 
     let url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${apiKey}`;
@@ -50,11 +50,11 @@ router.get('/autocomplete', authenticate, async (req, res, next) => {
 
 router.get('/geocode', authenticate, async (req, res, next) => {
   try {
-    const { place_id, key } = req.query;
-    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || key;
+    const { place_id } = req.query;
+    const apiKey = process.env.GOOGLE_MAPS_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
     
     if (!apiKey) {
-      return res.status(400).json({ error: 'API key is required' });
+      return res.status(500).json({ error: 'Maps API key is not configured on the server' });
     }
 
     const url = `https://maps.googleapis.com/maps/api/geocode/json?place_id=${place_id}&key=${apiKey}`;

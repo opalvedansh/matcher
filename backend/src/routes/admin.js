@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { param } = require('express-validator');
+const { param, body } = require('express-validator');
 const validate = require('../middleware/validate');
 const { authenticate } = require('../middleware/auth');
 const requireAdmin = require('../middleware/requireAdmin');
@@ -11,10 +11,19 @@ const {
   deleteUser,
   bulkBanUsers,
   bulkUnbanUsers,
+  getAlgorithmWeights,
+  updateAlgorithmWeights
 } = require('../controllers/adminController');
 
 const userIdRules = [
   param('userId').isString().notEmpty().withMessage('userId is required')
+];
+
+const algorithmRules = [
+  body('CATEGORY_OVERLAP').isNumeric(),
+  body('BUDGET_FIT').isNumeric(),
+  body('LOCATION_MATCH').isNumeric(),
+  body('COMPLETENESS').isNumeric()
 ];
 
 // All admin routes require authentication + admin check
@@ -27,5 +36,8 @@ router.post('/users/bulk-unban',            bulkUnbanUsers);
 router.post('/users/:userId/ban',           userIdRules, validate, banUser);
 router.post('/users/:userId/unban',         userIdRules, validate, unbanUser);
 router.delete('/users/:userId',             userIdRules, validate, deleteUser);
+
+router.get ('/algorithm',                   getAlgorithmWeights);
+router.put ('/algorithm',                   algorithmRules, validate, updateAlgorithmWeights);
 
 module.exports = router;

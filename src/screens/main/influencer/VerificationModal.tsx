@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   StyleSheet,
@@ -9,11 +9,13 @@ import {
   Animated,
   Easing,
   Platform,
+  Alert,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { colors } from '@/theme/colors';
+import { verifyFace } from '@/api';
 
 interface VerificationModalProps {
   visible: boolean;
@@ -23,12 +25,15 @@ interface VerificationModalProps {
 
 export function VerificationModal({ visible, onClose, onVerified }: VerificationModalProps) {
   const [permission, requestPermission] = useCameraPermissions();
-  const [scanningStatus, setScanningStatus] = useState<'idle' | 'scanning' | 'success'>('idle');
+  const [scanningStatus, setScanningStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [scanLineAnim] = useState(new Animated.Value(0));
+  const cameraRef = useRef<CameraView>(null);
 
   useEffect(() => {
     if (visible) {
       setScanningStatus('idle');
+      setErrorMsg(null);
       scanLineAnim.setValue(0);
     }
   }, [visible]);
@@ -51,14 +56,8 @@ export function VerificationModal({ visible, onClose, onVerified }: Verification
           }),
         ])
       ).start();
-
-      // Simulate a network request or face analysis duration
-      const timer = setTimeout(() => {
-        scanLineAnim.stopAnimation();
-        setScanningStatus('success');
-      }, 4000);
-
-      return () => clearTimeout(timer);
+    } else {
+      scanLineAnim.stopAnimation();
     }
   }, [scanningStatus]);
 
@@ -71,12 +70,39 @@ export function VerificationModal({ visible, onClose, onVerified }: Verification
     }
   }, [scanningStatus, onVerified]);
 
-  const handleStartScan = () => {
+  const handleStartScan = async () => {
     if (!permission?.granted) {
       requestPermission();
       return;
     }
+    
     setScanningStatus('scanning');
+    setErrorMsg(null);
+    
+    try {
+      if (cameraRef.current) {
+        // Capture photo with lower quality to avoid 10MB Express limit
+        const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.3 });
+        
+        if (photo?.base64) {
+          // Send to backend for AWS Rekognition
+          const response = await verifyFace(photo.base64);
+          
+          if (response.success) {
+            setScanningStatus('success');
+          } else {
+            setScanningStatus('error');
+            setErrorMsg('Face is not matching the uploaded image by the user.');
+          }
+        } else {
+          setScanningStatus('error');
+          setErrorMsg('Failed to capture image data.');
+        }
+      }
+    } catch (error: any) {
+      setScanningStatus('error');
+      setErrorMsg(error.message || 'Face is not matching the uploaded image by the user.');
+    }
   };
 
   if (!permission) {
@@ -103,8 +129,8 @@ export function VerificationModal({ visible, onClose, onVerified }: Verification
           </SafeAreaView>
         ) : (
           <View style={styles.cameraContainer}>
-            <CameraView style={styles.camera} facing="front">
-              <SafeAreaView style={styles.overlay}>
+            <CameraView style={styles.camera} facing="front" ref={cameraRef} />
+            <SafeAreaView style={[styles.overlay, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}>
                 <View style={styles.header}>
                   <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                     <Ionicons name="close" size={28} color="#FFF" />
@@ -151,6 +177,17 @@ export function VerificationModal({ visible, onClose, onVerified }: Verification
                         Please hold still while we verify your identity.
                       </Text>
                     </BlurView>
+                  ) : scanningStatus === 'error' ? (
+                    <BlurView intensity={80} tint="dark" style={[styles.instructionCard, styles.errorCard]}>
+                      <Ionicons name="warning" size={48} color="#FF3B30" />
+                      <Text style={styles.errorTitle}>Verification Failed</Text>
+                      <Text style={styles.errorText}>
+                        {errorMsg || 'Face is not matching the uploaded image by the user.'}
+                      </Text>
+                      <TouchableOpacity style={styles.retryButton} onPress={handleStartScan}>
+                        <Text style={styles.scanButtonText}>Try Again</Text>
+                      </TouchableOpacity>
+                    </BlurView>
                   ) : (
                     <BlurView intensity={80} tint="dark" style={[styles.instructionCard, styles.successCard]}>
                       <Ionicons name="checkmark-circle" size={48} color="#4CD964" />
@@ -161,8 +198,7 @@ export function VerificationModal({ visible, onClose, onVerified }: Verification
                     </BlurView>
                   )}
                 </View>
-              </SafeAreaView>
-            </CameraView>
+            </SafeAreaView>
           </View>
         )}
       </View>
@@ -290,6 +326,9 @@ const styles = StyleSheet.create({
   successCard: {
     backgroundColor: 'rgba(76, 217, 100, 0.1)',
   },
+  errorCard: {
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+  },
   instructionTitle: {
     fontSize: 22,
     fontWeight: '700',
@@ -303,6 +342,13 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 8,
   },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FF3B30',
+    marginTop: 12,
+    marginBottom: 8,
+  },
   instructionText: {
     fontSize: 15,
     color: 'rgba(255,255,255,0.8)',
@@ -310,8 +356,23 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 22,
   },
+  errorText: {
+    fontSize: 15,
+    color: 'rgba(255,59,48,0.9)',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
   scanButton: {
     backgroundColor: colors.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 30,
+    width: '100%',
+    alignItems: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#FF3B30',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 30,

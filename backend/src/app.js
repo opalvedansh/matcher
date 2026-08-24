@@ -42,6 +42,7 @@ const uploadRoutes  = require('./routes/upload');
 const adminRoutes   = require('./routes/admin');
 const storiesRoutes = require('./routes/stories');
 const mapsRoutes    = require('./routes/maps');
+const postsRoutes   = require('./routes/posts');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -138,6 +139,7 @@ app.use('/api/upload',   uploadRoutes);
 app.use('/api/admin',    adminRoutes);
 app.use('/api/stories',  storiesRoutes);
 app.use('/api/maps',     mapsRoutes);
+app.use('/api/posts',    postsRoutes);
 
 // ─── API Documentation ───────────────────────────────────────────
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -192,3 +194,4 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 module.exports = server; // for testing
+ 

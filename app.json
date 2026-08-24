@@ -3,6 +3,7 @@
     "name": "Matchr",
     "slug": "matchr",
     "version": "1.0.0",
+    "scheme": "matchr",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -11,7 +12,10 @@
       "bundleIdentifier": "com.webnexis.mymatcher1",
       "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Matchr needs camera access to take profile photos.",
+        "NSPhotoLibraryUsageDescription": "Matchr needs photo library access to upload profile photos.",
+        "NSMicrophoneUsageDescription": "Matchr needs microphone access for video features."
       }
     },
     "android": {
@@ -32,6 +36,10 @@
         "projectId": "30dd21ae-c95f-4436-9c2d-58ab7857bb7d"
       }
     },
-    "owner": "vedansh_8125"
+    "owner": "vedansh_8125",
+    "plugins": [
+      "expo-router",
+      "expo-notifications"
+    ]
   }
 }

@@ -3,7 +3,7 @@ import { type User } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
 import { supabase } from '../supabase';
-import { syncUser, updateMyProfile, uploadImage } from '../api';
+import { syncUser, updateMyProfile, uploadImage, syncInstagram } from '../api';
 import api from '../api/client';
 import { socketService } from '../api/socket';
 
@@ -18,6 +18,7 @@ export interface OnboardingData {
   categories: string[];
   location: { name: string; lat: number; lng: number } | null;
   bio: string;
+  instagramUsername?: string;
   photos: string[];
   packages: any[];
   // Brand-specific
@@ -292,7 +293,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               location:   onboardingData.location?.name    || undefined,
               lat:        onboardingData.location?.lat     ?? undefined,
               lng:        onboardingData.location?.lng     ?? undefined,
+              instagram_handle: onboardingData.instagramUsername || undefined,
             });
+
+            // Fire off the Instagram scrape in the background (fire-and-forget)
+            if (onboardingData.instagramUsername) {
+              syncInstagram(onboardingData.instagramUsername).catch(e => {
+                console.warn('[API] Background Instagram sync failed:', e);
+              });
+            }
           }
         } catch (e) {
           console.warn('[API] updateMyProfile on complete failed:', e);

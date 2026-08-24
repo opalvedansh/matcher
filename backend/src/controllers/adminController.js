@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { feedCache } = require('../config/cache');
 const logger = require('../config/logger');
 
 // ─── GET /api/admin/stats ────────────────────────────────────────
@@ -183,4 +184,46 @@ async function bulkUnbanUsers(req, res, next) {
   }
 }
 
-module.exports = { getStats, listUsers, banUser, unbanUser, deleteUser, bulkBanUsers, bulkUnbanUsers };
+// ─── GET /api/admin/algorithm ────────────────────────────────────
+async function getAlgorithmWeights(req, res, next) {
+  try {
+    const { rows } = await db.query("SELECT value FROM admin_settings WHERE key = 'algorithm_weights'");
+    if (!rows.length) {
+      return res.json({ CATEGORY_OVERLAP: 40, BUDGET_FIT: 30, LOCATION_MATCH: 20, COMPLETENESS: 10 });
+    }
+    res.json(rows[0].value);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── PUT /api/admin/algorithm ────────────────────────────────────
+async function updateAlgorithmWeights(req, res, next) {
+  try {
+    const { CATEGORY_OVERLAP, BUDGET_FIT, LOCATION_MATCH, COMPLETENESS } = req.body;
+    
+    // Ensure all values exist and add up to 100 (optional, but good practice).
+    const weights = {
+      CATEGORY_OVERLAP: CATEGORY_OVERLAP || 0,
+      BUDGET_FIT: BUDGET_FIT || 0,
+      LOCATION_MATCH: LOCATION_MATCH || 0,
+      COMPLETENESS: COMPLETENESS || 0
+    };
+
+    await db.query(
+      `INSERT INTO admin_settings (key, value, updated_at) 
+       VALUES ('algorithm_weights', $1::jsonb, now()) 
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+      [JSON.stringify(weights)]
+    );
+
+    feedCache.del('algorithm_weights');
+
+    logger.info({ admin: req.user.id, weights }, 'Algorithm weights updated');
+    res.json(weights);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getStats, listUsers, banUser, unbanUser, deleteUser, bulkBanUsers, bulkUnbanUsers, getAlgorithmWeights, updateAlgorithmWeights };

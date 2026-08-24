@@ -242,8 +242,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     backgroundColor: '#1a1a1a',
     borderRadius: 20,
     borderWidth: 1,
@@ -251,6 +251,6 @@ const styles = StyleSheet.create({
   },
   pillTxt: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 11,
   },
 });

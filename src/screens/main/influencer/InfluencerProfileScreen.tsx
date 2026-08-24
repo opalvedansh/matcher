@@ -17,11 +17,13 @@ import {
   Linking,
   Alert
 } from 'react-native';
-import { Ionicons, FontAwesome, MaterialIcons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome, MaterialIcons, Feather, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWindowDimensions } from 'react-native';
+import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
-import { getMyProfile, updateMyProfile, getProfileById } from '@/api';
+import { getMyProfile, updateMyProfile, getProfileById, syncInstagram } from '@/api';
+import { useAuth } from '@/contexts/AuthContext';
 import type { InfluencerProfile } from '@/api/types';
 import { StoryPackageIcon, UgcPackageIcon, BrandPackageIcon, ReelPackageIcon } from '@/components/PackageIcons';
 import { VerificationModal } from './VerificationModal';
@@ -188,9 +190,11 @@ const chartSt = StyleSheet.create({
 type Tab = 'overview' | 'engagement' | 'audience';
 
 export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId?: string, onBack?: () => void }) {
+  const { signOut } = useAuth();
   const { width, height } = useWindowDimensions();
   const scrollY = useRef(new Animated.Value(0)).current;
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const isPremium = false; // Mock premium check
   const [activeProfile, setActiveProfile] = useState<InfluencerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -199,17 +203,55 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
 
   const [isAddReelVisible, setIsAddReelVisible] = useState(false);
+  const [isEditInstagramVisible, setIsEditInstagramVisible] = useState(false);
+  const [editInstagramHandle, setEditInstagramHandle] = useState('');
+  const [isUpdatingInstagram, setIsUpdatingInstagram] = useState(false);
   const [isVerificationModalVisible, setIsVerificationModalVisible] = useState(false);
+  const [isEditWorkedWithVisible, setIsEditWorkedWithVisible] = useState(false);
+  const [newWorkedWith, setNewWorkedWith] = useState('');
   const [newReelUrl, setNewReelUrl] = useState('');
   // We use activeProfile?.reels, but keep a local state if optimistic UI is desired, 
   // or just depend on activeProfile.reels directly. Let's use activeProfile for consistency.
   const reels = activeProfile?.reels || [];
+
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     async function loadProfile() {
       try {
         const profile = publicUserId ? await getProfileById(publicUserId) : await getMyProfile();
         setActiveProfile(profile as InfluencerProfile);
+        
+        // Auto-trigger sync if user has an instagram handle but no stats yet
+        const p = profile as InfluencerProfile;
+        if (!publicUserId && p.instagram_handle && !p.followers) {
+          setIsSyncing(true);
+          syncInstagram(p.instagram_handle)
+            .then(() => {
+              // Start polling every 15s for updated stats
+              let attempts = 0;
+              const maxAttempts = 12; // poll for up to 3 minutes
+              const poll = setInterval(async () => {
+                attempts++;
+                try {
+                  const updated = await getMyProfile();
+                  const up = updated as InfluencerProfile;
+                  setActiveProfile(up);
+                  // Stop polling once we have real stats
+                  if (up.followers > 0 || attempts >= maxAttempts) {
+                    clearInterval(poll);
+                    setIsSyncing(false);
+                  }
+                } catch {
+                  if (attempts >= maxAttempts) {
+                    clearInterval(poll);
+                    setIsSyncing(false);
+                  }
+                }
+              }, 15_000);
+            })
+            .catch(() => setIsSyncing(false));
+        }
       } catch (err: any) {
         setError(err.message || 'Failed to load profile');
       } finally {
@@ -276,6 +318,61 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
     }
   };
 
+  const handleUpdateInstagram = async () => {
+    if (!editInstagramHandle.trim()) return;
+    try {
+      setIsUpdatingInstagram(true);
+      const cleanHandle = editInstagramHandle.replace(/^@/, '').trim().toLowerCase();
+      // Optimistic update
+      setActiveProfile(prev => prev ? { ...prev, instagram_handle: cleanHandle } : prev);
+      
+      // Update in DB
+      await updateMyProfile({ instagram_handle: cleanHandle });
+      
+      // Trigger sync
+      setIsEditInstagramVisible(false);
+      setEditInstagramHandle('');
+      
+      // We don't await this so it happens in the background, which will trigger the polling UI
+      syncInstagram(cleanHandle);
+    } catch (e: any) {
+      Alert.alert('Update failed', e.message || 'Could not update Instagram handle.');
+    } finally {
+      setIsUpdatingInstagram(false);
+    }
+  };
+
+  const handleAddWorkedWith = async () => {
+    if (!newWorkedWith.trim()) return;
+    const added = newWorkedWith.trim();
+    const currentList = activeProfile?.worked_with || [];
+    if (currentList.includes(added)) {
+      setNewWorkedWith('');
+      return;
+    }
+    const newList = [...currentList, added];
+    try {
+      setActiveProfile(prev => prev ? { ...prev, worked_with: newList } : prev);
+      await updateMyProfile({ worked_with: newList });
+      setNewWorkedWith('');
+    } catch (e) {
+      Alert.alert('Error', 'Could not update worked with list');
+      setActiveProfile(prev => prev ? { ...prev, worked_with: currentList } : prev);
+    }
+  };
+
+  const handleRemoveWorkedWith = async (company: string) => {
+    const currentList = activeProfile?.worked_with || [];
+    const newList = currentList.filter(c => c !== company);
+    try {
+      setActiveProfile(prev => prev ? { ...prev, worked_with: newList } : prev);
+      await updateMyProfile({ worked_with: newList });
+    } catch (e) {
+      Alert.alert('Error', 'Could not update worked with list');
+      setActiveProfile(prev => prev ? { ...prev, worked_with: currentList } : prev);
+    }
+  };
+
   const handlePickImage = async () => {
     if (publicUserId) return;
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -283,18 +380,31 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.5,
-      base64: true,
     });
 
-    if (!result.canceled && result.assets[0].base64 && activeProfile) {
-      const newUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      const previousProfile = activeProfile;
-      setActiveProfile({ ...activeProfile, avatar_url: newUri });
+    if (!result.canceled && result.assets && result.assets.length > 0) {
       try {
-        await updateMyProfile({ avatar_url: newUri });
-      } catch (err) {
-        console.error('Failed to update profile image:', err);
-        setActiveProfile(previousProfile);
+        const uri = result.assets[0].uri;
+        setActiveProfile(prev => prev ? { ...prev, avatar_url: uri } : prev);
+        
+        const fileExt = uri.split('.').pop() || 'jpeg';
+        const fileName = `${Date.now()}.${fileExt}`;
+        
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        
+        const { data, error } = await supabase.storage
+          .from('avatars')
+          .upload(fileName, blob);
+          
+        if (error) throw error;
+        
+        const { data: { publicUrl } } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(fileName);
+          
+        await updateMyProfile({ avatar_url: publicUrl });
+      } catch (e) {
         Alert.alert('Update failed', 'Could not upload image. Reverted changes.');
       }
     }
@@ -318,20 +428,32 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
   const engagementStr = activeProfile.engagement_rate ? `${activeProfile.engagement_rate}%` : '0%';
 
   const PLATFORMS_DB: Record<string, { bg: string, icon: React.ReactNode }> = {
-    'Instagram': { bg: '#E1306C', icon: <FontAwesome name="instagram" size={16} color="#FFF" /> },
-    'YouTube': { bg: '#FF0000', icon: <FontAwesome name="youtube-play" size={16} color="#FFF" /> },
-    'TikTok': { bg: '#000000', icon: <FontAwesome name="music" size={16} color="#FFF" /> },
-    'Twitter': { bg: '#1DA1F2', icon: <FontAwesome name="twitter" size={16} color="#FFF" /> },
-    'Reddit': { bg: '#FF4500', icon: <FontAwesome name="reddit-alien" size={16} color="#FFF" /> },
-    'Pinterest': { bg: '#E60023', icon: <FontAwesome name="pinterest-p" size={16} color="#FFF" /> },
-    'Facebook': { bg: '#1877F2', icon: <FontAwesome name="facebook-f" size={16} color="#FFF" /> },
+    instagram: { bg: '#E1306C', icon: <FontAwesome6 name="instagram" size={16} color="#FFF" /> },
+    youtube: { bg: '#FF0000', icon: <FontAwesome6 name="youtube" size={16} color="#FFF" /> },
+    tiktok: { bg: '#000000', icon: <FontAwesome6 name="tiktok" size={16} color="#FFF" /> },
+    x: { bg: '#000000', icon: <FontAwesome6 name="x-twitter" size={16} color="#FFF" /> },
+    twitter: { bg: '#1DA1F2', icon: <FontAwesome6 name="twitter" size={16} color="#FFF" /> },
+    reddit: { bg: '#FF4500', icon: <FontAwesome6 name="reddit-alien" size={16} color="#FFF" /> },
+    pinterest: { bg: '#E60023', icon: <FontAwesome6 name="pinterest" size={16} color="#FFF" /> },
+    facebook: { bg: '#1877F2', icon: <FontAwesome6 name="facebook-f" size={16} color="#FFF" /> },
+    linkedin: { bg: '#0A66C2', icon: <FontAwesome6 name="linkedin-in" size={16} color="#FFF" /> },
+    snapchat: { bg: '#FFFC00', icon: <FontAwesome6 name="snapchat" size={16} color="#000" /> },
+    threads: { bg: '#000000', icon: <FontAwesome6 name="threads" size={16} color="#FFF" /> },
+    spotify: { bg: '#1DB954', icon: <FontAwesome6 name="spotify" size={16} color="#FFF" /> },
+    twitch: { bg: '#9146FF', icon: <FontAwesome6 name="twitch" size={16} color="#FFF" /> },
+    discord: { bg: '#5865F2', icon: <FontAwesome6 name="discord" size={16} color="#FFF" /> },
+    behance: { bg: '#1769FF', icon: <FontAwesome6 name="behance" size={16} color="#FFF" /> },
+    dribbble: { bg: '#EA4C89', icon: <FontAwesome6 name="dribbble" size={16} color="#FFF" /> },
   };
 
-  const demoPlatforms = activeProfile.platforms?.length > 0 ? activeProfile.platforms : ['Reddit', 'Pinterest', 'YouTube', 'Facebook', 'Instagram'];
-  const platformsList = demoPlatforms.map(p => ({
-    name: p,
-    ...(PLATFORMS_DB[p] || { bg: '#FF6B2B', icon: <FontAwesome name="star" size={16} color="#FFF" /> })
-  }));
+  const demoPlatforms = activeProfile.platforms?.length > 0 ? activeProfile.platforms : ['reddit', 'pinterest', 'youtube', 'facebook', 'instagram'];
+  const platformsList = demoPlatforms.map(p => {
+    const matchedKey = Object.keys(PLATFORMS_DB).find(k => k.toLowerCase() === p.toLowerCase());
+    return {
+      name: p,
+      ...(matchedKey ? PLATFORMS_DB[matchedKey] : { bg: '#FF6B2B', icon: <FontAwesome6 name="star" size={16} color="#FFF" /> })
+    };
+  });
 
   const packages = [
     { type: 'story', name: 'Story Package', desc: '1 Instagram Story . 24hr visibility', price: '1000' },
@@ -352,6 +474,14 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
         <View style={{ position: 'absolute', top: 50, left: 16, zIndex: 10 }}>
           <Pressable onPress={onBack} style={{ width: 40, height: 40, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}>
             <Ionicons name="arrow-back" size={24} color="#FFF" />
+          </Pressable>
+        </View>
+      )}
+
+      {!publicUserId && (
+        <View style={{ position: 'absolute', top: 50, right: 16, zIndex: 10 }}>
+          <Pressable onPress={signOut} style={{ padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name="log-out-outline" size={20} color="#FFF" />
           </Pressable>
         </View>
       )}
@@ -394,7 +524,7 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
             pointerEvents="none"
           />
           {/* Progress Bars */}
-          <View style={[styles.progressContainer, { pointerEvents: 'none', position: 'absolute', top: 60, left: 0, right: 0 }]}>
+          <View style={[styles.progressContainer, { pointerEvents: 'none', position: 'absolute', left: 16, right: 16 }]}>
             {photos.map((_, i) => (
               <View key={i} style={[styles.progressBar, i <= currentPhotoIndex ? styles.progressBarActive : {}]} />
             ))}
@@ -429,6 +559,36 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
               </TouchableOpacity>
             ) : null}
           </View>
+
+          {/* ── Instagram Handle ── */}
+          {activeProfile.instagram_handle ? (
+            <TouchableOpacity 
+              style={styles.instagramHandleRow}
+              onPress={() => {
+                if (!publicUserId) {
+                  setEditInstagramHandle(activeProfile.instagram_handle);
+                  setIsEditInstagramVisible(true);
+                }
+              }}
+              disabled={!!publicUserId}
+            >
+              <FontAwesome6 name="instagram" size={13} color="#E1306C" />
+              <Text style={styles.instagramHandleText}>@{activeProfile.instagram_handle}</Text>
+              {!publicUserId && <Ionicons name="pencil" size={12} color="#888" style={{ marginLeft: 4 }} />}
+            </TouchableOpacity>
+          ) : !publicUserId ? (
+            <TouchableOpacity 
+              style={styles.instagramHandleRow}
+              onPress={() => {
+                setEditInstagramHandle('');
+                setIsEditInstagramVisible(true);
+              }}
+            >
+              <FontAwesome6 name="instagram" size={13} color="#888" />
+              <Text style={[styles.instagramHandleText, { color: '#888' }]}>Add Instagram Handle</Text>
+            </TouchableOpacity>
+          ) : null}
+
           <Text style={styles.niche}>{niche}</Text>
 
           <View style={styles.locationRow}>
@@ -455,17 +615,55 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
           </View>
         </View>
 
-        {/* ── Worked With (Dummy) ── */}
-        <View style={styles.sectionCentered}>
-          <Text style={styles.smallSubtitleCentered}>Worked With</Text>
-          <View style={styles.logosContainer}>
-             <View style={styles.dummyLogo}><Ionicons name="logo-apple" size={24} color="#000" /></View>
-             <View style={styles.dummyLogo}><Ionicons name="logo-google" size={24} color="#000" /></View>
-             <View style={styles.dummyLogo}><Ionicons name="logo-amazon" size={24} color="#000" /></View>
-             <View style={styles.dummyLogo}><Ionicons name="logo-microsoft" size={24} color="#000" /></View>
-             <View style={styles.dummyLogo}><Ionicons name="logo-facebook" size={24} color="#000" /></View>
+        {/* ── Instagram Sync Banner ── */}
+        {isSyncing && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8, gap: 8 }}>
+            <ActivityIndicator size="small" color="#FF6B2B" />
+            <Text style={{ color: '#AAA', fontSize: 12 }}>Fetching Instagram stats…</Text>
           </View>
-        </View>
+        )}
+
+        {/* ── Worked With ── */}
+        {(activeProfile?.worked_with?.length > 0 || !publicUserId) && (
+          <View style={styles.sectionCentered}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+              <Text style={[styles.smallSubtitleCentered, { marginBottom: 0 }]}>Worked With</Text>
+              {!publicUserId && (
+                <TouchableOpacity onPress={() => setIsEditWorkedWithVisible(true)} style={{ marginLeft: 8 }}>
+                  <Ionicons name="pencil" size={14} color="#888" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={styles.logosContainer}>
+              {activeProfile?.worked_with?.map((company, index) => {
+                const lower = company.toLowerCase();
+                let iconName = null;
+                if (lower.includes('apple')) iconName = 'logo-apple';
+                else if (lower.includes('google')) iconName = 'logo-google';
+                else if (lower.includes('amazon')) iconName = 'logo-amazon';
+                else if (lower.includes('microsoft')) iconName = 'logo-microsoft';
+                else if (lower.includes('facebook')) iconName = 'logo-facebook';
+                else if (lower.includes('instagram')) iconName = 'logo-instagram';
+                else if (lower.includes('twitter') || lower === 'x') iconName = 'logo-twitter';
+                else if (lower.includes('tiktok')) iconName = 'logo-tiktok';
+                else if (lower.includes('youtube')) iconName = 'logo-youtube';
+                
+                return (
+                  <View key={index} style={styles.dummyLogo}>
+                    {iconName ? (
+                      <Ionicons name={iconName as any} size={24} color="#000" />
+                    ) : (
+                      <Text style={{ color: '#000', fontSize: 12, fontWeight: 'bold' }}>{company.substring(0, 2).toUpperCase()}</Text>
+                    )}
+                  </View>
+                );
+              })}
+              {(!activeProfile?.worked_with || activeProfile.worked_with.length === 0) && !publicUserId && (
+                <Text style={{ color: '#888', fontSize: 13, marginTop: 8 }}>Add companies you've worked with</Text>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* ── Available On ── */}
         {platformsList.length > 0 && (
@@ -508,11 +706,17 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
                    }
                  }}
                >
-                 <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, justifyContent: 'center', alignItems: 'center', padding: 8 }]}>
-                   <Ionicons name="logo-instagram" size={24} color="#888" />
-                   <Text style={{color: '#888', fontSize: 10, marginTop: 8, textAlign: 'center'}} numberOfLines={2}>
-                     {item.url.replace('https://www.instagram.com/', '')}
-                   </Text>
+                 <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }]}>
+                   {item.thumbnail_url ? (
+                     <Image source={{ uri: item.thumbnail_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                   ) : (
+                     <View style={{ padding: 8, alignItems: 'center' }}>
+                       <Ionicons name="logo-instagram" size={24} color="#888" />
+                       <Text style={{color: '#888', fontSize: 10, marginTop: 8, textAlign: 'center'}} numberOfLines={2}>
+                         {item.url.replace('https://www.instagram.com/', '')}
+                       </Text>
+                     </View>
+                   )}
                  </View>
                  <View style={styles.reelViewsOverlay}>
                    <Ionicons name="play-outline" size={10} color="#FFF" />
@@ -539,6 +743,7 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
         </View>
 
         {/* ── Tab Content ── */}
+        <View style={{ position: 'relative', overflow: 'hidden', minHeight: 400 }}>
         {activeTab === 'overview' && (
           <View style={styles.tabContent}>
             <Text style={styles.bigSectionTitle}>Summary</Text>
@@ -707,6 +912,25 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
 
           </View>
         )}
+        
+          {/* Premium Overlay */}
+          {!isPremium && (
+            <BlurView intensity={30} tint="dark" style={[StyleSheet.absoluteFill, { zIndex: 10, justifyContent: 'center', alignItems: 'center' }]}>
+              <View style={styles.premiumBanner}>
+                <View style={styles.heartCircle}>
+                  <Ionicons name="lock-closed" size={24} color="#FF6B2B" />
+                </View>
+                <Text style={styles.premiumTitle}>Unlock Analytics</Text>
+                <Text style={styles.premiumSubtitle}>
+                  Activate Matcherc Premium to see advanced insights and analytics for this profile.
+                </Text>
+                <Pressable style={styles.premiumBtn}>
+                  <Text style={styles.premiumBtnText}>Activate Premium</Text>
+                </Pressable>
+              </View>
+            </BlurView>
+          )}
+        </View>
 
         {/* ── Rates (Packages) ── */}
         <View style={[styles.section, { paddingTop: 20 }]}>
@@ -798,6 +1022,43 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
 
       </View>
       </Animated.ScrollView>
+      {/* ── Edit Instagram Modal ── */}
+      <Modal visible={isEditInstagramVisible} transparent animationType="slide" onRequestClose={() => setIsEditInstagramVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Instagram Handle</Text>
+              <Pressable onPress={() => setIsEditInstagramVisible(false)}>
+                <Ionicons name="close" size={24} color="#FFF" />
+              </Pressable>
+            </View>
+            <Text style={styles.modalSubtitle}>Enter your Instagram username to automatically sync followers, engagement, and views.</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="e.g. cristiano"
+              placeholderTextColor="#666"
+              value={editInstagramHandle}
+              onChangeText={setEditInstagramHandle}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Pressable 
+              style={[styles.modalButton, isUpdatingInstagram && { opacity: 0.5 }]} 
+              onPress={handleUpdateInstagram}
+              disabled={isUpdatingInstagram}
+            >
+              {isUpdatingInstagram ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.modalButtonText}>Save & Sync</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+
+
       {/* ── Add Reel Modal ── */}
       <Modal visible={isAddReelVisible} transparent animationType="slide" onRequestClose={() => setIsAddReelVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -821,6 +1082,51 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
             <Pressable style={styles.modalButton} onPress={handleAddReel}>
               <Text style={styles.modalButtonText}>Add Reel</Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Edit Worked With Modal ── */}
+      <Modal visible={isEditWorkedWithVisible} transparent animationType="slide" onRequestClose={() => setIsEditWorkedWithVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Worked With</Text>
+              <Pressable onPress={() => setIsEditWorkedWithVisible(false)}>
+                <Ionicons name="close" size={24} color="#FFF" />
+              </Pressable>
+            </View>
+            <Text style={styles.modalSubtitle}>Add companies or brands you have collaborated with.</Text>
+            
+            <View style={{ flexDirection: 'row', marginBottom: 20 }}>
+              <TextInput
+                style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
+                placeholder="e.g. Apple, Nike"
+                placeholderTextColor="#666"
+                value={newWorkedWith}
+                onChangeText={setNewWorkedWith}
+                onSubmitEditing={handleAddWorkedWith}
+              />
+              <Pressable style={[styles.modalButton, { paddingHorizontal: 16, marginLeft: 10, alignSelf: 'stretch', justifyContent: 'center' }]} onPress={handleAddWorkedWith}>
+                <Text style={styles.modalButtonText}>Add</Text>
+              </Pressable>
+            </View>
+
+            <View style={{ maxHeight: 200, width: '100%' }}>
+              <Animated.ScrollView>
+                {activeProfile?.worked_with?.map((company, index) => (
+                  <View key={index} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#222', padding: 12, borderRadius: 8, marginBottom: 8 }}>
+                    <Text style={{ color: '#FFF' }}>{company}</Text>
+                    <Pressable onPress={() => handleRemoveWorkedWith(company)} style={{ padding: 4 }}>
+                      <Ionicons name="trash-outline" size={18} color="#FF6B2B" />
+                    </Pressable>
+                  </View>
+                ))}
+                {(!activeProfile?.worked_with || activeProfile.worked_with.length === 0) && (
+                  <Text style={{ color: '#888', textAlign: 'center', marginVertical: 10 }}>No companies added yet.</Text>
+                )}
+              </Animated.ScrollView>
+            </View>
           </View>
         </View>
       </Modal>
@@ -925,6 +1231,17 @@ const styles = StyleSheet.create({
     color: '#FF6B2B',
     fontSize: 12,
     fontWeight: '600',
+  },
+  instagramHandleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 4,
+  },
+  instagramHandleText: {
+    fontSize: 13,
+    color: '#E1306C',
+    fontWeight: '500',
   },
   niche: {
     fontSize: 14,
@@ -1367,4 +1684,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  premiumBanner: { alignItems: 'center', paddingHorizontal: 32 },
+  heartCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  premiumTitle: { color: '#FFF', fontSize: 20, fontWeight: '700', marginBottom: 10 },
+  premiumSubtitle: { color: '#FFF', fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
+  premiumBtn: { backgroundColor: '#FFF', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 24 },
+  premiumBtnText: { color: '#000', fontSize: 14, fontWeight: '700' },
 });

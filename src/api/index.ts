@@ -72,12 +72,20 @@ export function getMyProfile() {
   return api.get<AnyProfile>('/api/profiles/me');
 }
 
+export function verifyFace(base64Image: string) {
+  return api.post<{ success: boolean; message: string; similarity: number }>('/api/profiles/verify-face', { base64Image });
+}
+
 export function updateMyProfile(data: ProfileUpdate) {
   return api.put<AnyProfile>('/api/profiles/me', data);
 }
 
 export function getProfileById(userId: string) {
   return api.get<AnyProfile>(`/api/profiles/${userId}`);
+}
+
+export function syncInstagram(instagram_handle: string) {
+  return api.post<AnyProfile>('/api/profiles/sync-instagram', { instagram_handle });
 }
 
 // ─── Feed ─────────────────────────────────────────────────────────
@@ -87,8 +95,11 @@ export function getProfileById(userId: string) {
  * @param limit  How many to load (max 50)
  * @param offset Pagination offset
  */
-export function getFeed(limit = 10, offset = 0) {
-  return api.get<FeedResponse>(`/api/feed?limit=${limit}&offset=${offset}`);
+export function getFeed(limit = 10, cursorScore?: number, cursorId?: string) {
+  let url = `/api/feed?limit=${limit}`;
+  if (cursorScore !== undefined && cursorScore !== null) url += `&cursor_score=${cursorScore}`;
+  if (cursorId) url += `&cursor_id=${cursorId}`;
+  return api.get<FeedResponse>(url);
 }
 
 // ─── Swipes ───────────────────────────────────────────────────────
@@ -141,12 +152,20 @@ export function getFeedStories() {
   return api.get('/api/stories/feed');
 }
 
-// ─── Maps ─────────────────────────────────────────────────────────
-
-export function getMapAutocomplete(input: string, types: string = '(cities)', key: string) {
-  return api.get<any>(`/api/maps/autocomplete?input=${encodeURIComponent(input)}&types=${encodeURIComponent(types)}&key=${encodeURIComponent(key)}`);
+export function recordStoryView(storyId: string) {
+  return api.post(`/api/stories/${storyId}/view`, {});
 }
 
-export function getMapGeocode(placeId: string, key: string) {
-  return api.get<any>(`/api/maps/geocode?place_id=${encodeURIComponent(placeId)}&key=${encodeURIComponent(key)}`);
+export function getStoryViewers(storyId: string) {
+  return api.get<any[]>(`/api/stories/${storyId}/viewers`);
+}
+
+// ─── Maps ─────────────────────────────────────────────────────────
+
+export function getMapAutocomplete(input: string, types: string = '(cities)') {
+  return api.get<any>(`/api/maps/autocomplete?input=${encodeURIComponent(input)}&types=${encodeURIComponent(types)}`);
+}
+
+export function getMapGeocode(placeId: string) {
+  return api.get<any>(`/api/maps/geocode?place_id=${encodeURIComponent(placeId)}`);
 }

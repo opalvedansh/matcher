@@ -15,10 +15,12 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { useAuth } from '@/contexts/AuthContext';
 import { getMyProfile, updateMyProfile, uploadImage, getProfileById } from '@/api';
 import { ReelsIcon } from '@/components/ReelsIcon';
 import { StoriesIcon } from '@/components/StoriesIcon';
@@ -66,6 +68,7 @@ const MOCK_RATING_AVATARS = [
 
 export function BrandProfileScreen({ publicUserId, onBack }: { publicUserId?: string, onBack?: () => void }) {
   const { width } = useWindowDimensions();
+  const { signOut } = useAuth();
   const [profile, setProfile] = useState<BrandProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -292,6 +295,13 @@ export function BrandProfileScreen({ publicUserId, onBack }: { publicUserId?: st
           </TouchableOpacity>
         </View>
       )}
+      {!publicUserId && (
+        <View style={{ position: 'absolute', top: 50, right: 16, zIndex: 10 }}>
+          <Pressable onPress={signOut} style={{ padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name="log-out-outline" size={20} color="#FFF" />
+          </Pressable>
+        </View>
+      )}
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
         
         {/* ════ HERO COVER ════ */}
@@ -360,12 +370,20 @@ export function BrandProfileScreen({ publicUserId, onBack }: { publicUserId?: st
           <>
             <Text style={s.sectionTitle}>Active Platforms</Text>
             <View style={s.tagsWrap}>
-              {platforms.map((p: string) => (
-                <View key={p} style={[s.tagPill, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
-                  <FontAwesome6 name={p === 'x' ? 'x-twitter' : p} size={14} color="#FFF" />
-                  <Text style={s.tagTxt}>{p.charAt(0).toUpperCase() + p.slice(1)}</Text>
-                </View>
-              ))}
+              {platforms.map((p: string) => {
+                const iconMap: Record<string, string> = {
+                  x: 'x-twitter',
+                  facebook: 'facebook-f',
+                  linkedin: 'linkedin-in',
+                  reddit: 'reddit-alien'
+                };
+                return (
+                  <View key={p} style={[s.tagPill, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+                    <FontAwesome6 name={iconMap[p] || p} size={14} color="#FFF" />
+                    <Text style={s.tagTxt}>{p.charAt(0).toUpperCase() + p.slice(1)}</Text>
+                  </View>
+                );
+              })}
             </View>
           </>
         )}

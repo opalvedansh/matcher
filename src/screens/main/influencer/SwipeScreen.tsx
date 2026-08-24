@@ -3,16 +3,24 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   Dimensions,
-  Animated,
-  PanResponder,
   Image,
   Pressable,
   ScrollView,
   ActivityIndicator,
   Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { Ionicons, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getFeed, recordSwipe } from '@/api';
@@ -127,7 +135,9 @@ export function SwipeScreen({ onViewProfile, onNavigateToMessages }: { onViewPro
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [matchData, setMatchData] = useState<{ name: string; avatarUrl: string } | null>(null);
-  const position = useRef(new Animated.ValueXY()).current;
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const nextCursorRef = useRef<{ score: number | null, id: string | null }>({ score: null, id: null });
 
   // ── Load feed ───────────────────────────────────────────────────
   const loadFeed = useCallback(async () => {
@@ -152,7 +162,8 @@ export function SwipeScreen({ onViewProfile, onNavigateToMessages }: { onViewPro
 
     const prevIndex = currentIndex;
     setCurrentIndex(p => p + 1);
-    position.setValue({ x: 0, y: 0 });
+    translateX.value = 0;
+    translateY.value = 0;
 
     try {
       if (dir === 'right') {
@@ -186,56 +197,67 @@ export function SwipeScreen({ onViewProfile, onNavigateToMessages }: { onViewPro
         }
       } catch {/* silent */}
     }
-  }, [brands, currentIndex, position]);
+  }, [brands, currentIndex, translateX, translateY]);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 5 || Math.abs(g.dy) > 5,
-      onPanResponderMove: (_, g) => position.setValue({ x: g.dx, y: g.dy }),
-      onPanResponderRelease: (_, g) => {
-        if (g.dx > 120) {
-          Animated.timing(position, {
-            toValue: { x: width + 200, y: g.dy + (g.vy * 50) },
-            duration: 250,
-            useNativeDriver: false,
-          }).start(() => handleSwipe('right'));
-        } else if (g.dx < -120) {
-          Animated.timing(position, {
-            toValue: { x: -width - 200, y: g.dy + (g.vy * 50) },
-            duration: 250,
-            useNativeDriver: false,
-          }).start(() => handleSwipe('left'));
-        } else {
-          Animated.spring(position, { toValue: { x: 0, y: 0 }, friction: 4, tension: 50, useNativeDriver: false }).start();
-        }
-      },
+  const panGesture = Gesture.Pan()
+    .onUpdate((event) => {
+      translateX.value = event.translationX;
+      translateY.value = event.translationY;
     })
-  ).current;
+    .onEnd((event) => {
+      const SWIPE_VELOCITY = 500;
+      const SWIPE_THRESHOLD = width * 0.3;
 
-  const rotate = position.x.interpolate({
-    inputRange: [-width / 2, 0, width / 2],
-    outputRange: ['-15deg', '0deg', '15deg'],
-    extrapolate: 'clamp',
+      if (event.translationX > SWIPE_THRESHOLD || event.velocityX > SWIPE_VELOCITY) {
+        translateX.value = withTiming(width + 200, { duration: 250 }, () => {
+          runOnJS(handleSwipe)('right');
+        });
+        translateY.value = withTiming(event.translationY + (event.velocityY * 0.2), { duration: 250 });
+      } else if (event.translationX < -SWIPE_THRESHOLD || event.velocityX < -SWIPE_VELOCITY) {
+        translateX.value = withTiming(-width - 200, { duration: 250 }, () => {
+          runOnJS(handleSwipe)('left');
+        });
+        translateY.value = withTiming(event.translationY + (event.velocityY * 0.2), { duration: 250 });
+      } else {
+        translateX.value = withSpring(0, { damping: 15, stiffness: 200 });
+        translateY.value = withSpring(0, { damping: 15, stiffness: 200 });
+      }
+    });
+
+  const animatedCardStyle = useAnimatedStyle(() => {
+    const rotate = interpolate(
+      translateX.value,
+      [-width / 2, 0, width / 2],
+      [-15, 0, 15],
+      Extrapolation.CLAMP
+    );
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { rotate: `${rotate}deg` },
+      ],
+    };
   });
 
-  const likeOpacity = position.x.interpolate({
-    inputRange: [20, 100],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
+  const likeOpacityStyle = useAnimatedStyle(() => {
+    return {
+      opacity: interpolate(translateX.value, [20, 100], [0, 1], Extrapolation.CLAMP),
+    };
   });
 
-  const nopeOpacity = position.x.interpolate({
-    inputRange: [-100, -20],
-    outputRange: [1, 0],
-    extrapolate: 'clamp',
+  const nopeOpacityStyle = useAnimatedStyle(() => {
+    return {
+      opacity: interpolate(translateX.value, [-100, -20], [1, 0], Extrapolation.CLAMP),
+    };
   });
 
   const forceSwipe = (dir: 'left' | 'right') => {
     const x = dir === 'right' ? width + 200 : -width - 200;
-    Animated.timing(position, { toValue: { x, y: 0 }, duration: 250, useNativeDriver: false }).start(() => {
-      handleSwipe(dir);
+    translateX.value = withTiming(x, { duration: 250 }, () => {
+      runOnJS(handleSwipe)(dir);
     });
+    translateY.value = withTiming(0, { duration: 250 });
   };
 
   // ── Map API profile to card shape ───────────────────────────────
@@ -300,30 +322,30 @@ export function SwipeScreen({ onViewProfile, onNavigateToMessages }: { onViewPro
         const isTop = i === currentIndex;
         const item = toCardItem(profile);
         return (
-          <Animated.View
-            key={profile.user_id}
-            style={[
-              ss.cardWrapper,
-              isTop
-                ? { transform: [{ translateX: position.x }, { translateY: position.y }, { rotate }], zIndex: 10 }
-                : { zIndex: 1, transform: [{ scale: 0.97 }], top: 6 },
-            ]}
-            {...(isTop ? panResponder.panHandlers : {})}
-          >
-            <Pressable style={{ flex: 1 }} onPress={() => isTop && onViewProfile && onViewProfile(profile.user_id)}>
-              <CardContent item={item} />
-              {isTop && (
-                <>
-                  <Animated.View style={[ss.stamp, ss.likeStamp, { opacity: likeOpacity }]}>
-                    <Text style={ss.likeStampTxt}>LIKE</Text>
-                  </Animated.View>
-                  <Animated.View style={[ss.stamp, ss.nopeStamp, { opacity: nopeOpacity }]}>
-                    <Text style={ss.nopeStampTxt}>NOPE</Text>
-                  </Animated.View>
-                </>
-              )}
-            </Pressable>
-          </Animated.View>
+          <GestureDetector key={profile.user_id} gesture={isTop ? panGesture : Gesture.Pan().enabled(false)}>
+            <Animated.View
+              style={[
+                ss.cardWrapper,
+                isTop
+                  ? [animatedCardStyle, { zIndex: 10 }]
+                  : { zIndex: 1, transform: [{ scale: 0.97 }], top: 6 },
+              ]}
+            >
+              <Pressable style={{ flex: 1 }} onPress={() => isTop && onViewProfile && onViewProfile(profile.user_id)}>
+                <CardContent item={item} />
+                {isTop && (
+                  <>
+                    <Animated.View style={[ss.stamp, ss.likeStamp, likeOpacityStyle]}>
+                      <Text style={ss.likeStampTxt}>LIKE</Text>
+                    </Animated.View>
+                    <Animated.View style={[ss.stamp, ss.nopeStamp, nopeOpacityStyle]}>
+                      <Text style={ss.nopeStampTxt}>NOPE</Text>
+                    </Animated.View>
+                  </>
+                )}
+              </Pressable>
+            </Animated.View>
+          </GestureDetector>
         );
       })
       .reverse();

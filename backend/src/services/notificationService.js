@@ -1,5 +1,9 @@
 const db = require('../config/db');
 const { pushQueue } = require('../config/queue');
+const { Expo } = require('expo-server-sdk');
+
+// Shared Expo client for inline fallback sending
+const expo = new Expo();
 
 // Maximum IDs to batch in a single DB query / BullMQ addBulk call
 const CHUNK_SIZE = 500;
@@ -21,7 +25,8 @@ function chunk(arr, size) {
  * Sends push notifications to ONE OR MANY users in as few DB round trips as possible.
  *
  * - Fetches all push tokens in a single batched SELECT … WHERE id = ANY($1)
- * - Enqueues all messages with a single BullMQ addBulk() call per chunk
+ * - If BullMQ is available: enqueues all messages with a single addBulk() call per chunk
+ * - If BullMQ is unavailable (no Redis): sends notifications inline via the Expo SDK
  *
  * @param {Array<{ userId: string, title: string, body: string, data?: object }>} notifications
  */
@@ -43,36 +48,60 @@ async function sendBulkNotifications(notifications) {
     // Build userId → token map
     const tokenMap = new Map(rows.map(r => [r.id, r.expo_push_token]));
 
-    if (!pushQueue) {
-      console.warn('[Push] BullMQ unavailable (no Redis). Notifications skipped.');
+    // ── 3. Build message list, skipping users with no token ───────────
+    const messages = notifications
+      .filter(n => tokenMap.has(n.userId))
+      .map(n => ({
+        token: tokenMap.get(n.userId),
+        title: n.title,
+        body:  n.body,
+        data:  n.data || {},
+      }));
+
+    if (!messages.length) {
+      console.log('[Push] No tokens found for recipients — skipping.');
       return;
     }
 
-    // ── 3. Build BullMQ jobs, skipping users with no token ────────────
-    const jobs = notifications
-      .filter(n => tokenMap.has(n.userId))
-      .map(n => ({
+    if (pushQueue) {
+      // ── 4a. BullMQ path: enqueue in chunks ──────────────────────────
+      const jobs = messages.map(m => ({
         name: 'send_push',
-        data: {
-          token: tokenMap.get(n.userId),
-          title: n.title,
-          body:  n.body,
-          data:  n.data || {},
-        },
+        data: m,
         opts: {
           attempts: 3,
           backoff: { type: 'exponential', delay: 1000 },
         },
       }));
 
-    if (!jobs.length) {
-      console.log('[Push] No tokens found for recipients — skipping.');
-      return;
-    }
+      for (const jobChunk of chunk(jobs, CHUNK_SIZE)) {
+        await pushQueue.addBulk(jobChunk);
+      }
+    } else {
+      // ── 4b. Inline fallback: send directly via Expo SDK ─────────────
+      console.log(`[Push] BullMQ unavailable — sending ${messages.length} notification(s) inline.`);
 
-    // ── 4. Enqueue in chunks to avoid oversized BullMQ payloads ───────
-    for (const jobChunk of chunk(jobs, CHUNK_SIZE)) {
-      await pushQueue.addBulk(jobChunk);
+      const expoMessages = messages
+        .filter(m => Expo.isExpoPushToken(m.token))
+        .map(m => ({
+          to: m.token,
+          sound: 'default',
+          title: m.title,
+          body: m.body,
+          data: m.data,
+        }));
+
+      if (expoMessages.length) {
+        // Expo SDK batches internally via chunks
+        const chunks = expo.chunkPushNotifications(expoMessages);
+        for (const chunk of chunks) {
+          try {
+            await expo.sendPushNotificationsAsync(chunk);
+          } catch (err) {
+            console.error('[Push] Inline Expo send failed:', err);
+          }
+        }
+      }
     }
   } catch (err) {
     console.error('[Push] Failed to queue bulk notifications:', err);

@@ -11,6 +11,7 @@ import {
   Dimensions,
   ScrollView,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { AntDesign, Feather, FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -157,6 +158,7 @@ export function BrandDashboardScreen() {
   const [isConversationOpen, setIsConversationOpen] = useState(false);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const { width } = useWindowDimensions();
+  const router = useRouter();
 
   const fetchStories = async () => {
     try {
@@ -172,21 +174,7 @@ export function BrandDashboardScreen() {
   }, []);
 
   const handleAddStory = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.5,
-      base64: true,
-    });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const newUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      try {
-        await uploadStory(newUri);
-        fetchStories();
-      } catch (err) {
-        console.error('Failed to upload story', err);
-      }
-    }
+    router.push('/story-camera');
   };
 
   const renderStoryItem = (item: any, index: number) => {

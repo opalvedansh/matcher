@@ -113,7 +113,67 @@ async function getFeedStories(req, res, next) {
   }
 }
 
+async function recordView(req, res, next) {
+  try {
+    const userId = req.user.id;
+    const { storyId } = req.params;
+
+    await db.query(
+      `INSERT INTO story_views (story_id, viewer_id) 
+       VALUES ($1, $2) 
+       ON CONFLICT (story_id, viewer_id) DO NOTHING`,
+      [storyId, userId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getViewers(req, res, next) {
+  try {
+    const userId = req.user.id;
+    const { storyId } = req.params;
+
+    // Verify ownership
+    const storyResult = await db.query(
+      `SELECT user_id FROM stories WHERE id = $1`,
+      [storyId]
+    );
+    
+    if (storyResult.rowCount === 0) {
+      return res.status(404).json({ error: 'Story not found' });
+    }
+    
+    if (storyResult.rows[0].user_id !== userId) {
+      return res.status(403).json({ error: 'Not authorized to view viewers of this story' });
+    }
+
+    const { rows } = await db.query(
+      `SELECT v.viewed_at,
+              u.id as user_id, 
+              u.role, 
+              COALESCE(bp.name, ip.name) as name, 
+              COALESCE(bp.logo_url, ip.avatar_url) as avatar
+       FROM story_views v
+       JOIN users u ON v.viewer_id = u.id
+       LEFT JOIN brand_profiles bp ON bp.user_id = u.id
+       LEFT JOIN influencer_profiles ip ON ip.user_id = u.id
+       WHERE v.story_id = $1
+       ORDER BY v.viewed_at DESC`,
+      [storyId]
+    );
+
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   uploadStory,
-  getFeedStories
+  getFeedStories,
+  recordView,
+  getViewers
 };

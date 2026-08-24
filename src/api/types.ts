@@ -50,9 +50,10 @@ export interface InfluencerProfile {
   lng: number | null;
   age: number | null;
   gender: string | null;
+  instagram_handle?: string | null;
   platforms: string[];
   photos?: string[];
-  reels?: {id: string, url: string, views: string}[];
+  reels?: {id: string, url: string, views: string, thumbnail_url?: string}[];
   followers: number;
   engagement_rate: number;
   avg_views: number;
@@ -72,7 +73,8 @@ export type AnyProfile = BrandProfile | InfluencerProfile;
 export interface FeedResponse {
   data: (AnyProfile & { relevance_score?: number })[];
   count: number;
-  next_cursor: string | null;
+  next_cursor_score: number | null;
+  next_cursor_id: string | null;
   scoring?: {
     weights: Record<string, number>;
     description: string;
@@ -186,9 +188,10 @@ export interface InfluencerProfileUpdate {
   lng?: number;
   age?: number;
   gender?: string;
+  instagram_handle?: string;
   platforms?: string[];
   photos?: string[];
-  reels?: {id: string, url: string, views: string}[];
+  reels?: {id: string, url: string, views: string, thumbnail_url?: string}[];
   followers?: number;
   engagement_rate?: number;
   avg_views?: number;

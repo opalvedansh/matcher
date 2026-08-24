@@ -8,4 +8,7 @@ router.use(authenticate);
 router.post('/', storyController.uploadStory);
 router.get('/feed', storyController.getFeedStories);
 
+router.post('/:storyId/view', storyController.recordView);
+router.get('/:storyId/viewers', storyController.getViewers);
+
 module.exports = router;

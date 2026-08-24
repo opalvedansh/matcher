@@ -12,7 +12,7 @@ import { Ionicons, AntDesign } from '@expo/vector-icons';
 import { colors } from '@/theme/colors';
 import { getMapAutocomplete, getMapGeocode } from '@/api';
 
-const GOOGLE_MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? '';
+
 
 export interface LocationResult {
   name: string;  // Human-readable place name, e.g. "Mumbai, Maharashtra, India"
@@ -50,13 +50,10 @@ export function LocationPicker({ initialValue, onSelect, onBack }: Props) {
     }
 
     debounceRef.current = setTimeout(async () => {
-      if (!GOOGLE_MAPS_KEY || GOOGLE_MAPS_KEY === 'your_google_maps_api_key_here') {
-        console.warn('[LocationPicker] No Google Maps API key set in EXPO_PUBLIC_GOOGLE_MAPS_KEY');
-        return;
-      }
+
       setLoading(true);
       try {
-        const res = await getMapAutocomplete(trimmed, '(cities)', GOOGLE_MAPS_KEY);
+        const res = await getMapAutocomplete(trimmed, '(cities)');
         setPredictions(res.predictions ?? []);
       } catch (err) {
         console.error('[LocationPicker] Autocomplete error:', err);
@@ -77,7 +74,7 @@ export function LocationPicker({ initialValue, onSelect, onBack }: Props) {
     setResolving(true);
 
     try {
-      const res = await getMapGeocode(prediction.place_id, GOOGLE_MAPS_KEY);
+      const res = await getMapGeocode(prediction.place_id);
       const result = res.results?.[0];
 
       if (result) {
