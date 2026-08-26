@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.webnexis.mymatcher1",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Matchr needs camera access to take profile photos.",
@@ -39,7 +39,14 @@
     "owner": "vedansh_8125",
     "plugins": [
       "expo-router",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-web-browser",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.943950919478-qdt1laap0hufg4f5cdh5vhkv7b75f48h"
+        }
+      ]
     ]
   }
 }

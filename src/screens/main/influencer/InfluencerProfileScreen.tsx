@@ -24,6 +24,7 @@ import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
 import { getMyProfile, updateMyProfile, getProfileById, syncInstagram } from '@/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/supabase';
 import type { InfluencerProfile } from '@/api/types';
 import { StoryPackageIcon, UgcPackageIcon, BrandPackageIcon, ReelPackageIcon } from '@/components/PackageIcons';
 import { VerificationModal } from './VerificationModal';
@@ -566,7 +567,7 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
               style={styles.instagramHandleRow}
               onPress={() => {
                 if (!publicUserId) {
-                  setEditInstagramHandle(activeProfile.instagram_handle);
+                  setEditInstagramHandle(activeProfile.instagram_handle || '');
                   setIsEditInstagramVisible(true);
                 }
               }}
@@ -624,7 +625,7 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
         )}
 
         {/* ── Worked With ── */}
-        {(activeProfile?.worked_with?.length > 0 || !publicUserId) && (
+        {(((activeProfile?.worked_with?.length) || 0) > 0 || !publicUserId) && (
           <View style={styles.sectionCentered}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
               <Text style={[styles.smallSubtitleCentered, { marginBottom: 0 }]}>Worked With</Text>

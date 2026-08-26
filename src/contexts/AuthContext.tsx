@@ -6,6 +6,19 @@ import { supabase } from '../supabase';
 import { syncUser, updateMyProfile, uploadImage, syncInstagram } from '../api';
 import api from '../api/client';
 import { socketService } from '../api/socket';
+import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
+import * as QueryParams from 'expo-auth-session/build/QueryParams';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+
+WebBrowser.maybeCompleteAuthSession();
+
+// Configure Google Sign-In for native
+GoogleSignin.configure({
+  webClientId: '943950919478-l56meupro3lo2lsuq7lk84021bmm464l.apps.googleusercontent.com',
+  iosClientId: '943950919478-qdt1laap0hufg4f5cdh5vhkv7b75f48h.apps.googleusercontent.com',
+  scopes: ['profile', 'email'],
+});
 
 // Onboarding data shape
 export interface OnboardingData {
@@ -180,6 +193,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { await syncUser(); } catch (e) { console.warn('[API] syncUser on sign-up failed:', e); }
   };
 
+  const handleNativeOAuth = async (provider: 'google' | 'apple') => {
+    const redirectUrl = makeRedirectUri();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: redirectUrl,
+        skipBrowserRedirect: true,
+      }
+    });
+    
+    if (error) throw error;
+    
+    if (data?.url) {
+      const res = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+      if (res.type === 'success' && res.url) {
+        const { params, errorCode } = QueryParams.getQueryParams(res.url);
+        if (errorCode) throw new Error(errorCode);
+        const { access_token, refresh_token } = params;
+        if (access_token && refresh_token) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+          if (sessionError) throw sessionError;
+        }
+      }
+    }
+  };
+
   const signInWithGoogle = async () => {
     if (Platform.OS === 'web') {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -188,8 +230,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (error) throw error;
     } else {
-      console.warn('Google Sign-In on native requires additional setup. See Supabase docs.');
-      throw new Error('Google Sign-In is not yet configured for native. Please use email/password.');
+      try {
+        await GoogleSignin.hasPlayServices();
+        const userInfo = await GoogleSignin.signIn();
+        
+        // Handle both older and newer versions of the GoogleSignin API response
+        const idToken = userInfo.data?.idToken || (userInfo as any).idToken;
+        
+        if (idToken) {
+          const { error } = await supabase.auth.signInWithIdToken({
+            provider: 'google',
+            token: idToken,
+          });
+          if (error) throw error;
+        } else {
+          throw new Error('No ID token returned from Google Sign-In');
+        }
+      } catch (err: any) {
+        console.warn('Google Sign-In Error:', err);
+        throw err;
+      }
     }
   };
 
@@ -201,8 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (error) throw error;
     } else {
-      console.warn('Apple Sign-In on native requires additional setup. See Supabase docs.');
-      throw new Error('Apple Sign-In is not yet configured for native. Please use email/password.');
+      await handleNativeOAuth('apple');
     }
   };
 
