@@ -12,7 +12,7 @@ import {
 
 import { colors } from '@/theme/colors';
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000';
+const BACKEND_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mymatcher-production.up.railway.app';
 
 const fetchInstagramUsers = async (query: string): Promise<string[]> => {
   if (!query || query.length < 3) return [];

@@ -14,7 +14,7 @@ function getBaseUrl(): string {
     const host = debuggerHost?.split(':')[0] ?? 'localhost';
     return `http://${host}:4000`;
   }
-  return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000';
+  return process.env.EXPO_PUBLIC_API_URL || 'https://mymatcher-production.up.railway.app';
 }
 
 const SOCKET_URL = getBaseUrl();
