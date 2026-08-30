@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   Pressable,
   StyleSheet,
   Text,
@@ -94,6 +95,7 @@ export function LocationPicker({ initialValue, onSelect, onBack }: Props) {
   };
 
   const handleConfirm = () => {
+    Keyboard.dismiss();
     if (selected) {
       onSelect(selected);
     } else if (query.trim().length > 0) {

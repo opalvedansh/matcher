@@ -6,6 +6,7 @@ import {
   TextInput,
   FlatList,
   Image,
+  Keyboard,
   Pressable,
   KeyboardAvoidingView,
   Platform,
@@ -116,6 +117,7 @@ export function ConversationScreen({ matchId, chatName, chatAvatar, myAvatar, on
     
     const text = inputText.trim();
     setInputText('');
+    Keyboard.dismiss();
 
     // Optimistically update UI
     const tempMsg: ChatMessage = {

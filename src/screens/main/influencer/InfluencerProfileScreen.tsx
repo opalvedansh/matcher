@@ -7,6 +7,7 @@ import {
   ScrollView,
   Image,
   Platform,
+  Keyboard,
   Pressable,
   Dimensions,
   ActivityIndicator,
@@ -1042,10 +1043,12 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
               onChangeText={setEditInstagramHandle}
               autoCapitalize="none"
               autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
             />
             <Pressable 
               style={[styles.modalButton, isUpdatingInstagram && { opacity: 0.5 }]} 
-              onPress={handleUpdateInstagram}
+              onPress={() => { Keyboard.dismiss(); handleUpdateInstagram(); }}
               disabled={isUpdatingInstagram}
             >
               {isUpdatingInstagram ? (
@@ -1079,8 +1082,10 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
               onChangeText={setNewReelUrl}
               autoCapitalize="none"
               autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
             />
-            <Pressable style={styles.modalButton} onPress={handleAddReel}>
+            <Pressable style={styles.modalButton} onPress={() => { Keyboard.dismiss(); handleAddReel(); }}>
               <Text style={styles.modalButtonText}>Add Reel</Text>
             </Pressable>
           </View>
@@ -1106,7 +1111,8 @@ export function InfluencerProfileScreen({ publicUserId, onBack }: { publicUserId
                 placeholderTextColor="#666"
                 value={newWorkedWith}
                 onChangeText={setNewWorkedWith}
-                onSubmitEditing={handleAddWorkedWith}
+                returnKeyType="done"
+                onSubmitEditing={() => { Keyboard.dismiss(); handleAddWorkedWith(); }}
               />
               <Pressable style={[styles.modalButton, { paddingHorizontal: 16, marginLeft: 10, alignSelf: 'stretch', justifyContent: 'center' }]} onPress={handleAddWorkedWith}>
                 <Text style={styles.modalButtonText}>Add</Text>

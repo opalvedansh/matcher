@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AntDesign, Feather } from '@expo/vector-icons';
 import {
+  Keyboard,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -115,6 +116,8 @@ export function NameInputScreen({
                 selectionColor={colors.primary}
                 autoCapitalize="none"
                 autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
               />
               {isSearching && (
                 <View style={{ position: 'absolute', right: 20, top: 0, bottom: 0, justifyContent: 'center' }}>
@@ -155,6 +158,7 @@ export function NameInputScreen({
             disabled={name.trim() === ''}
             onPress={() => {
               if (name.trim() !== '') {
+                Keyboard.dismiss();
                 onNext?.(name, instagramId);
               }
             }}

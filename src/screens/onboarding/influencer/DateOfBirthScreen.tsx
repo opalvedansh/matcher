@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AntDesign } from '@expo/vector-icons';
 import {
+  Keyboard,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -47,6 +48,8 @@ export function DateOfBirthScreen({
             selectionColor={colors.primary}
             keyboardType="numeric"
             maxLength={10}
+            returnKeyType="done"
+            onSubmitEditing={Keyboard.dismiss}
           />
         </View>
 
@@ -58,7 +61,7 @@ export function DateOfBirthScreen({
               dob.trim() === '' && styles.nextButtonDisabled,
             ]}
             disabled={dob.trim() === ''}
-            onPress={() => onNext?.(dob)}
+            onPress={() => { Keyboard.dismiss(); onNext?.(dob); }}
           >
             <Text style={styles.nextButtonText}>Next</Text>
           </Pressable>

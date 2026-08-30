@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AntDesign } from '@expo/vector-icons';
 import {
+  Keyboard,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -64,7 +65,7 @@ export function BioInputScreen({
               !isValid && styles.nextButtonDisabled,
             ]}
             disabled={!isValid}
-            onPress={() => onNext?.(bio.trim())}
+            onPress={() => { Keyboard.dismiss(); onNext?.(bio.trim()); }}
           >
             <Text style={styles.nextButtonText}>Next</Text>
           </Pressable>

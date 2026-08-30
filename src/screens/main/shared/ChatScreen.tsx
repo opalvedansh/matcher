@@ -6,6 +6,7 @@ import {
   TextInput,
   FlatList,
   Image,
+  Keyboard,
   Pressable,
   ActivityIndicator,
 } from 'react-native';
@@ -148,6 +149,8 @@ export function ChatScreen({ onConversationStateChange }: ChatScreenProps) {
           style={styles.searchInput}
           placeholder="Search"
           placeholderTextColor="#888"
+          returnKeyType="search"
+          onSubmitEditing={Keyboard.dismiss}
         />
       </View>
 

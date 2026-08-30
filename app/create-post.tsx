@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -140,7 +141,7 @@ export default function CreatePostScreen() {
 
           <Pressable
             style={[styles.shareBtn, (!imageUri || isUploading) && styles.shareBtnDisabled]}
-            onPress={handlePost}
+            onPress={() => { Keyboard.dismiss(); handlePost(); }}
             disabled={!imageUri || isUploading}
           >
             {isUploading ? (
@@ -252,6 +253,8 @@ export default function CreatePostScreen() {
               multiline
               maxLength={500}
               textAlignVertical="top"
+              returnKeyType="done"
+              blurOnSubmit
             />
             <View style={styles.captionFooter}>
               <Text style={styles.charCount}>{caption.length}/500</Text>

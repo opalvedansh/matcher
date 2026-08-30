@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Keyboard, Pressable, Alert, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
 import { api } from '@/api/client';
 import { colors } from '@/theme/colors';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -91,6 +91,8 @@ export default function AdminAlgorithmScreen() {
           keyboardType="numeric"
           placeholderTextColor="rgba(255,255,255,0.2)"
           selectionColor={colors.primary}
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
         />
         <Text style={styles.inputSuffix}>pts</Text>
       </View>
@@ -135,7 +137,7 @@ export default function AdminAlgorithmScreen() {
 
                   <Pressable 
                     style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]} 
-                    onPress={handleSave}
+                    onPress={() => { Keyboard.dismiss(); handleSave(); }}
                     disabled={saving}
                   >
                     <LinearGradient

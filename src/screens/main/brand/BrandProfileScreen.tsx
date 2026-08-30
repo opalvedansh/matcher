@@ -11,6 +11,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
+  Keyboard,
   Modal,
   TextInput,
   KeyboardAvoidingView,
@@ -222,6 +223,7 @@ export function BrandProfileScreen({ publicUserId, onBack }: { publicUserId?: st
 
   const handleSaveBudget = async () => {
     if (!profile) return;
+    Keyboard.dismiss();
     
     const bMin = parseInt(editBudgetMin) || 0;
     const bMax = parseInt(editBudgetMax) || 0;
@@ -655,6 +657,7 @@ export function BrandProfileScreen({ publicUserId, onBack }: { publicUserId?: st
                 placeholderTextColor="#666"
                 value={editBudgetMin}
                 onChangeText={setEditBudgetMin}
+                returnKeyType="next"
               />
             </View>
 
@@ -667,6 +670,7 @@ export function BrandProfileScreen({ publicUserId, onBack }: { publicUserId?: st
                 placeholderTextColor="#666"
                 value={editBudgetMax}
                 onChangeText={setEditBudgetMax}
+                returnKeyType="next"
               />
             </View>
 
@@ -679,6 +683,8 @@ export function BrandProfileScreen({ publicUserId, onBack }: { publicUserId?: st
                 placeholderTextColor="#666"
                 value={editDays}
                 onChangeText={setEditDays}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
               />
             </View>
 

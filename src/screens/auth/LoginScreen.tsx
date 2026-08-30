@@ -4,6 +4,7 @@ import { AntDesign, FontAwesome, Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -202,6 +203,7 @@ function EmailAuthForm({
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                returnKeyType="next"
               />
             </View>
 
@@ -215,6 +217,8 @@ function EmailAuthForm({
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
+                returnKeyType={isSignup ? 'next' : 'done'}
+                onSubmitEditing={isSignup ? undefined : Keyboard.dismiss}
               />
             </View>
 
@@ -229,6 +233,8 @@ function EmailAuthForm({
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   secureTextEntry
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
                 />
               </View>
             ) : null}
@@ -236,7 +242,7 @@ function EmailAuthForm({
             {/* Submit Button */}
             <Pressable
               style={[styles.submitButton, loading && styles.buttonDisabled]}
-              onPress={handleSubmit}
+              onPress={() => { Keyboard.dismiss(); handleSubmit(); }}
               disabled={loading}
             >
               {loading ? (
