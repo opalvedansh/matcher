@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
@@ -111,7 +112,8 @@ export function LocationPicker({ initialValue, onSelect, onBack }: Props) {
   const isReady = (!!selected || query.trim().length > 0) && !resolving;
 
   return (
-    <View style={styles.container}>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={styles.container}>
       {/* Back Button */}
       {onBack && (
         <Pressable onPress={onBack} style={styles.backButton}>
@@ -212,7 +214,8 @@ export function LocationPicker({ initialValue, onSelect, onBack }: Props) {
           {isReady ? 'Confirm Location' : 'Search or enter a location'}
         </Text>
       </Pressable>
-    </View>
+      </View>
+    </TouchableWithoutFeedback>
   );
 }
 

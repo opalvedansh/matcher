@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
   useWindowDimensions,
   Platform,
@@ -167,7 +168,9 @@ function EmailAuthForm({
         bounces={false}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={styles.emailContainer}>
           <View style={[styles.emailContent, { width: contentWidth }]}>
             {/* Back Button */}
@@ -255,6 +258,7 @@ function EmailAuthForm({
             </Pressable>
           </View>
         </View>
+        </TouchableWithoutFeedback>
       </ScrollView>
     </SafeAreaView>
   );

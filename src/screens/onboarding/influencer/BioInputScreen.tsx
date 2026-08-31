@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 
@@ -27,7 +28,8 @@ export function BioInputScreen({
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={styles.container}>
         {/* Header */}
         <Pressable onPress={onBack} style={styles.backButton}>
           <AntDesign name="arrow-left" size={24} color={colors.text} />
@@ -71,6 +73,7 @@ export function BioInputScreen({
           </Pressable>
         </View>
       </View>
+      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }

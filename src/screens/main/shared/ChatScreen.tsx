@@ -8,6 +8,7 @@ import {
   Image,
   Keyboard,
   Pressable,
+  TouchableWithoutFeedback,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -137,6 +138,8 @@ export function ChatScreen({ onConversationStateChange }: ChatScreenProps) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={{ flex: 1 }}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Chat</Text>
         <Pressable>
@@ -169,6 +172,8 @@ export function ChatScreen({ onConversationStateChange }: ChatScreenProps) {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
+        </View>
+      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }
