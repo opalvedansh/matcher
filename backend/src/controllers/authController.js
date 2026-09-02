@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const redisClient = require('../config/redis');
 
 /**
  * POST /api/auth/sync
@@ -47,6 +48,11 @@ async function syncUser(req, res, next) {
       );
     }
 
+    // Invalidate Redis cache so the next request pulls the updated role
+    if (redisClient) {
+      await redisClient.del(`user:session:${uid}`);
+    }
+
     await client.query('COMMIT');
     return res.status(200).json({ user });
   } catch (err) {
@@ -93,6 +99,11 @@ async function updateOnboardingData(req, res, next) {
        RETURNING onboarding_data`,
       [JSON.stringify(req.body), req.user.id]
     );
+
+    if (redisClient) {
+      await redisClient.del(`user:session:${req.user.id}`);
+    }
+
     res.json(rows[0]?.onboarding_data || {});
   } catch (err) {
     next(err);

@@ -67,6 +67,7 @@ interface AuthContextType {
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithApple: () => Promise<void>;
+  signInWithLinkedIn: () => Promise<void>;
   signOut: () => Promise<void>;
   // Onboarding methods
   updateOnboarding: (data: Partial<OnboardingData>) => Promise<void>;
@@ -128,41 +129,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserData = async (currentUser: User) => {
     try {
-      // First ensure the user is synced in the backend DB
-      try {
-        await syncUser();
-      } catch (err) {
-        // Network failure (backend down) — warn and continue.
-        // The user is still authenticated via Supabase; we just can't reach our custom API.
-        console.warn('[API] syncUser failed (backend may be offline):', (err as any)?.message ?? err);
-      }
-
       // Fetch user profile and onboarding state from Backend
       const [dbUser, onboardingProgress] = await Promise.all([
-        api.get<any>('/api/auth/me').catch(() => null),
-        api.get<any>('/api/auth/onboarding').catch(() => null)
+        api.get<any>('/api/auth/me').catch((e) => {
+          if (e?.response?.status === 403) return null; // Expected if user just signed up (trigger worked, but role is null so they need to onboard)
+          throw e; // Bubble up network errors
+        }),
+        api.get<any>('/api/auth/onboarding').catch((e) => {
+          if (e?.response?.status === 403) return null;
+          throw e;
+        })
       ]);
 
       if (dbUser) {
         setOnboardingComplete(!!dbUser.role);
       } else {
-        // dbUser is null — could be a ghost user OR the backend is simply offline.
-        // Only attempt self-healing if the previous syncUser didn't throw a network error.
-        console.warn('[Auth] dbUser not found. Attempting self-healing sync...');
-        try {
-          await syncUser();
-          const healedUser = await api.get<any>('/api/auth/me').catch(() => null);
-          setOnboardingComplete(!!healedUser?.role);
-        } catch (healErr: any) {
-          const isNetworkError = healErr?.message?.includes('fetch') || healErr?.message?.includes('network') || healErr?.message?.includes('ECONNREFUSED');
-          if (isNetworkError) {
-            // Backend is offline — don't block the user, just show onboarding
-            console.warn('[Auth] Backend unreachable. Continuing with default onboarding state.');
-          } else {
-            console.error('[Auth] Self-healing sync failed:', healErr);
-          }
-          setOnboardingComplete(false);
-        }
+        setOnboardingComplete(false);
       }
 
       if (onboardingProgress && Object.keys(onboardingProgress).length > 0) {
@@ -171,9 +153,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setOnboardingData({ ...DEFAULT_ONBOARDING });
       }
     } catch (error) {
-      console.error('Error fetching user data:', error);
-      setOnboardingData({ ...DEFAULT_ONBOARDING });
-      setOnboardingComplete(false);
+      console.error('Network Error fetching user data:', error);
+      alert("Network Error: Could not connect to servers. Please check your connection and restart the app.");
+      // Do NOT push them into default onboarding state. Sign out so they can retry clean.
+      supabase.auth.signOut();
     } finally {
       setLoading(false);
     }
@@ -184,13 +167,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithEmail = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    try { await syncUser(); } catch (e) { console.warn('[API] syncUser on sign-in failed:', e); }
   };
 
   const signUpWithEmail = async (email: string, password: string) => {
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
-    try { await syncUser(); } catch (e) { console.warn('[API] syncUser on sign-up failed:', e); }
   };
 
   const handleNativeOAuth = async (provider: 'google' | 'apple') => {
@@ -265,6 +246,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signInWithLinkedIn = async () => {
+    if (Platform.OS === 'web') {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'linkedin_oidc',
+        options: { redirectTo: window.location.origin }
+      });
+      if (error) throw error;
+    } else {
+      await handleNativeOAuth('linkedin_oidc');
+    }
+  };
+
   const signOut = async () => {
     try {
       const { error } = await supabase.auth.signOut();
@@ -302,7 +295,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await api.post('/api/auth/sync', { role });
       } catch (e) {
-        console.warn('[API] syncUser on complete failed:', e);
+        console.error('[API] syncUser on complete failed:', e);
+        alert("Failed to initialize profile. Please try again.");
+        return; // HALT EXECUTION
       }
 
       // 2. Push profile fields into PostgreSQL
@@ -311,16 +306,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Upload logo if necessary
           let finalLogo = onboardingData.logo;
           if (finalLogo && (finalLogo.startsWith('file://') || finalLogo.startsWith('blob:'))) {
-            try { finalLogo = await uploadImage(finalLogo); } 
-            catch (e) { console.warn('[API] upload logo failed:', e); }
+            try { 
+              finalLogo = await uploadImage(finalLogo); 
+            } catch (e) { 
+              console.error('[API] upload logo failed:', e); 
+              alert("Failed to upload logo. Please try again.");
+              return; // HALT EXECUTION
+            }
           }
 
           // Upload photos if necessary
           const finalPhotos = [];
           for (const uri of (onboardingData.photos || [])) {
             if (uri && (uri.startsWith('file://') || uri.startsWith('blob:'))) {
-              try { finalPhotos.push(await uploadImage(uri)); } 
-              catch (e) { console.warn('[API] upload photo failed:', e); finalPhotos.push(uri); }
+              try { 
+                finalPhotos.push(await uploadImage(uri)); 
+              } catch (e) { 
+                console.error('[API] upload photo failed:', e); 
+                alert("Failed to upload a photo. Please try again.");
+                return; // HALT EXECUTION
+              }
             } else {
               finalPhotos.push(uri);
             }
@@ -363,13 +368,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
         } catch (e) {
-          console.warn('[API] updateMyProfile on complete failed:', e);
+          console.error('[API] updateMyProfile on complete failed:', e);
+          alert("Failed to save profile. Please try again.");
+          return; // HALT EXECUTION
         }
       }
 
       setOnboardingComplete(true);
     } catch (error) {
       console.error('Error completing onboarding:', error);
+      alert("An unexpected error occurred.");
     }
   };
 
@@ -384,6 +392,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUpWithEmail,
         signInWithGoogle,
         signInWithApple,
+        signInWithLinkedIn,
         signOut,
         updateOnboarding,
         completeOnboarding,

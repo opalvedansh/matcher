@@ -6,9 +6,9 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production'
     ? { rejectUnauthorized: false }
     : false,
-  max: 20,              // max connections in pool
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 15000,
+  max: 100,             // high concurrency for 100k scale
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 5000, // fail fast under load
 });
 
 pool.on('error', (err) => {

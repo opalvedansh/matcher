@@ -1,6 +1,7 @@
 const { verifySupabaseToken } = require('../utils/verifyToken');
 const db     = require('../config/db');
 const logger = require('../config/logger');
+const redisClient = require('../config/redis');
 
 /**
  * Middleware — verifies the Supabase ID token in the Authorization header.
@@ -25,24 +26,36 @@ async function authenticate(req, res, next) {
       return res.status(401).json({ error: 'Invalid Supabase token', details: jwtErr.message });
     }
 
-    // Look up the user row in our DB
+    // Try Redis Cache First
+    const cacheKey = `user:session:${uid}`;
+    if (redisClient) {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        req.user = JSON.parse(cached);
+        if (req.user.banned) {
+          return res.status(403).json({ error: 'Your account has been suspended. Contact support.' });
+        }
+        return next();
+      }
+    }
+
+    // Cache miss or Redis unavailable — query DB
     const { rows } = await db.query(
       'SELECT id, email, role, banned FROM users WHERE id = $1',
       [uid]
     );
 
     if (!rows.length) {
-      // User hasn't called /api/auth/sync yet — auto-create the row
-      const { rows: [newUser] } = await db.query(
-        `INSERT INTO users (id, email, role)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email
-         RETURNING id, email, role`,
-        [uid, email, null]
-      );
-      req.user = newUser;
-    } else {
-      req.user = rows[0];
+      // User is not in our DB yet. Return 403 to trigger onboarding flow, 
+      // instead of creating a ghost user here.
+      return res.status(403).json({ error: 'Profile incomplete', code: 'profile_incomplete' });
+    }
+
+    req.user = rows[0];
+
+    // Populate Cache (5 minute TTL)
+    if (redisClient) {
+      await redisClient.setex(cacheKey, 300, JSON.stringify(req.user));
     }
 
     // Check if user is banned

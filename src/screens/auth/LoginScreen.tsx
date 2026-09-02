@@ -272,7 +272,7 @@ function AuthPage({
   mode: 'login' | 'signup';
   onSwitchMode: (mode: AuthMode) => void;
 }) {
-  const { signInWithGoogle, signInWithApple } = useAuth();
+  const { signInWithGoogle, signInWithApple, signInWithLinkedIn } = useAuth();
   const { width, height } = useWindowDimensions();
   const contentWidth = Math.min(width - 28, 500);
   const titleSize = 48;
@@ -309,6 +309,20 @@ function AuthPage({
     } catch (err: any) {
       if (err?.code !== 'auth/popup-closed-by-user') {
         setError(err?.message || 'Apple sign-in failed');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLinkedInSignIn = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await signInWithLinkedIn();
+    } catch (err: any) {
+      if (err?.code !== 'auth/popup-closed-by-user') {
+        setError(err?.message || 'LinkedIn sign-in failed');
       }
     } finally {
       setLoading(false);
@@ -370,7 +384,7 @@ function AuthPage({
             <Text style={styles.separator}>Or</Text>
 
             <View style={styles.socialRow}>
-              <SocialButton>
+              <SocialButton onPress={handleLinkedInSignIn}>
                 <FontAwesome
                   name="linkedin-square"
                   size={24}
