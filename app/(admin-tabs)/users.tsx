@@ -47,7 +47,18 @@ export default function AdminUsersScreen() {
     }
   };
 
-  const renderRoleBadge = (role: string) => {
+  const renderRoleBadge = (role: string | null | undefined) => {
+    if (!role) {
+      return (
+        <View style={[styles.roleBadge, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]}>
+          <Ionicons name="time" size={12} color="#9CA3AF" />
+          <Text style={[styles.roleText, { color: '#9CA3AF' }]}>
+            PENDING
+          </Text>
+        </View>
+      );
+    }
+    
     const isBrand = role === 'brand';
     return (
       <View style={[styles.roleBadge, { backgroundColor: isBrand ? 'rgba(244, 114, 182, 0.15)' : 'rgba(96, 165, 250, 0.15)' }]}>
