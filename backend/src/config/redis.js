@@ -8,7 +8,7 @@ let redisClient = null;
 const shouldUseRedis =
   process.env.NODE_ENV === 'test'
     ? false
-    : !!process.env.REDIS_URL || process.env.NODE_ENV === 'production';
+    : !!process.env.REDIS_URL;
 
 if (process.env.NODE_ENV === 'test') {
   const Redis = require('ioredis-mock');
