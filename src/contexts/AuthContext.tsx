@@ -174,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
-  const handleNativeOAuth = async (provider: 'google' | 'apple') => {
+  const handleNativeOAuth = async (provider: 'google' | 'apple' | 'linkedin_oidc') => {
     const redirectUrl = makeRedirectUri();
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -215,8 +215,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await GoogleSignin.hasPlayServices();
         const userInfo = await GoogleSignin.signIn();
         
+        // If user dismissed or cancelled the modal, exit cleanly
+        if (userInfo.type === 'cancelled') {
+          return;
+        }
+        
         // Handle both older and newer versions of the GoogleSignin API response
-        const idToken = userInfo.data?.idToken || (userInfo as any).idToken;
+        let idToken = userInfo.data?.idToken || (userInfo as any).idToken;
+        
+        // Fallback to getTokens() if idToken is empty (sometimes happens on iOS)
+        if (!idToken) {
+          const tokens = await GoogleSignin.getTokens();
+          idToken = tokens.idToken;
+        }
         
         if (idToken) {
           const { error } = await supabase.auth.signInWithIdToken({

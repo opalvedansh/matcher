@@ -393,7 +393,7 @@ function AuthPage({
               </SocialButton>
               <SocialButton onPress={handleAppleSignIn}>
                 <AntDesign
-                  name="instagram"
+                  name="apple1"
                   size={24}
                   color={colors.background}
                 />
