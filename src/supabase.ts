@@ -20,10 +20,11 @@ let client: ReturnType<typeof createSupabaseClient>;
 if (process.env.NODE_ENV === 'production') {
   client = createSupabaseClient();
 } else {
-  if (!(global as any)._supabaseClient) {
-    (global as any)._supabaseClient = createSupabaseClient();
+  const g = globalThis as any;
+  if (!g._supabaseClient) {
+    g._supabaseClient = createSupabaseClient();
   }
-  client = (global as any)._supabaseClient;
+  client = g._supabaseClient;
 }
 
 export const supabase = client;

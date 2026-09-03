@@ -50,6 +50,7 @@ class SocketService {
       return;
     }
 
+    console.log('[Socket] Connecting to:', SOCKET_URL);
     this.socket = io(SOCKET_URL, {
       auth: { token },
       transports: ['websocket'],
