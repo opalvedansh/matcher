@@ -6,12 +6,18 @@ import { Platform } from 'react-native';
 // `localhost` resolves to the phone itself on physical devices.
 // We use the Expo Metro bundler host (your Mac's LAN IP) in dev instead.
 function getBaseUrl(): string {
+  // Always respect explicit environment variables first
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+
   if (__DEV__ && Platform.OS !== 'web') {
     const debuggerHost = Constants.expoConfig?.hostUri ?? Constants.manifest2?.extra?.expoGo?.debuggerHost;
     const host = debuggerHost?.split(':')[0] ?? 'localhost';
     return `http://${host}:4000`;
   }
-  return process.env.EXPO_PUBLIC_API_URL ?? 'https://mymatcher-production.up.railway.app';
+  
+  return 'https://mymatcher-production.up.railway.app';
 }
 
 const BASE_URL = getBaseUrl();

@@ -97,9 +97,19 @@ const swipeLimiter = rateLimit({
 app.use(helmet());
 app.use(cors({
   origin: (origin, cb) => {
-    // Allow requests with no origin (native mobile apps, curl)
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    cb(new Error(`CORS: origin ${origin} not allowed`));
+    // Allow requests with no origin (native mobile apps, curl, etc.)
+    if (!origin) return cb(null, true);
+
+    // Allow all localhost and 127.0.0.1 origins on any port (for Expo Web, Vite, dev)
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return cb(null, true);
+    }
+
+    if (ALLOWED_ORIGINS.includes(origin) || process.env.ALLOWED_ORIGINS === '*') {
+      return cb(null, true);
+    }
+
+    return cb(null, false);
   },
   credentials: true,
 }));

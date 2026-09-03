@@ -392,8 +392,8 @@ function AuthPage({
                 />
               </SocialButton>
               <SocialButton onPress={handleAppleSignIn}>
-                <AntDesign
-                  name="apple1"
+                <FontAwesome
+                  name="apple"
                   size={24}
                   color={colors.background}
                 />

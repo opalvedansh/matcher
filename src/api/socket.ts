@@ -8,13 +8,16 @@ import { Platform } from 'react-native';
 // itself. We instead use the Expo dev server host (your Mac's LAN IP).
 // On web or in production, we fall back to the env variable or localhost.
 function getBaseUrl(): string {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
   if (__DEV__ && Platform.OS !== 'web') {
-    // expo-constants gives us the host of the Metro bundler (your Mac's IP)
+    // expo-constants gives us the host of the Metro bundler (your Mac's LAN IP)
     const debuggerHost = Constants.expoConfig?.hostUri ?? Constants.manifest2?.extra?.expoGo?.debuggerHost;
     const host = debuggerHost?.split(':')[0] ?? 'localhost';
     return `http://${host}:4000`;
   }
-  return process.env.EXPO_PUBLIC_API_URL || 'https://mymatcher-production.up.railway.app';
+  return 'https://mymatcher-production.up.railway.app';
 }
 
 const SOCKET_URL = getBaseUrl();

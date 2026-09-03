@@ -132,11 +132,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Fetch user profile and onboarding state from Backend
       const [dbUser, onboardingProgress] = await Promise.all([
         api.get<any>('/api/auth/me').catch((e) => {
-          if (e?.response?.status === 403) return null; // Expected if user just signed up (trigger worked, but role is null so they need to onboard)
-          throw e; // Bubble up network errors
+          const status = e?.status ?? e?.response?.status;
+          if (status === 403 || status === 404) return null; // Expected if user just signed up and has no DB record yet
+          throw e; // Bubble up true network errors
         }),
         api.get<any>('/api/auth/onboarding').catch((e) => {
-          if (e?.response?.status === 403) return null;
+          const status = e?.status ?? e?.response?.status;
+          if (status === 403 || status === 404) return null;
           throw e;
         })
       ]);

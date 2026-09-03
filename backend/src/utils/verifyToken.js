@@ -25,7 +25,19 @@ const supabaseAuthBreaker = new CircuitBreaker(verifyViaSupabaseAPI, {
   timeout: 8000,                  // wait up to 8s
   errorThresholdPercentage: 80,   // only open after 80% failures (was 50%)
   resetTimeout: 5000,             // try to close again after 5s (was 10s)
-  capacity: 50
+  capacity: 50,
+  errorFilter: (err) => {
+    // Client auth errors (invalid token, missing session, 4xx) should not trip the breaker
+    if (err?.status >= 400 && err?.status < 500) return true;
+    if (err?.message && (
+      err.message.includes('Auth session missing') ||
+      err.message.includes('Invalid') ||
+      err.message.includes('expired')
+    )) {
+      return true;
+    }
+    return false;
+  }
 });
 
 supabaseAuthBreaker.on('open', () => logger.warn('[CircuitBreaker] Supabase API circuit OPEN'));
