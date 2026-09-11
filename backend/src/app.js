@@ -45,6 +45,7 @@ const mapsRoutes    = require('./routes/maps');
 const postsRoutes   = require('./routes/posts');
 
 const app  = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 // ─── Allowed origins ─────────────────────────────────────────────
