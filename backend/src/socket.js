@@ -38,10 +38,20 @@ function initSocket(server) {
 
   // ─── Redis Adapter (Optional for horizontal scaling) ─────────────
   if (process.env.REDIS_URL) {
-    const pubClient = new Redis(process.env.REDIS_URL);
-    const subClient = pubClient.duplicate();
-    io.adapter(createAdapter(pubClient, subClient));
-    console.log('[Socket] Redis Adapter enabled for horizontal scaling');
+    try {
+      const pubClient = new Redis(process.env.REDIS_URL, { family: 0, enableOfflineQueue: false });
+      const subClient = pubClient.duplicate();
+
+      // MUST attach error handlers — otherwise Node emits an unhandled 'error' event
+      pubClient.on('error', (err) => console.error('[Socket] Redis pub error:', err.message));
+      subClient.on('error', (err) => console.error('[Socket] Redis sub error:', err.message));
+      pubClient.on('connect', () => console.log('[Socket] Redis pub connected'));
+
+      io.adapter(createAdapter(pubClient, subClient));
+      console.log('[Socket] Redis Adapter enabled for horizontal scaling');
+    } catch (err) {
+      console.error('[Socket] Failed to set up Redis adapter — falling back to in-process:', err.message);
+    }
   }
 
   // ─── Middleware: Authenticate WebSocket Connection ───────────────

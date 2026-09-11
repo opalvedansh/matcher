@@ -16,10 +16,11 @@ if (process.env.NODE_ENV === 'test') {
 } else if (shouldUseRedis) {
   const Redis = require('ioredis');
   redisClient = new Redis(process.env.REDIS_URL, {
-    family: 0, // Railway internal networking requires IPv6 (family 0 allows both IPv4 and IPv6)
-    maxRetriesPerRequest: 3,          // fail fast instead of 20 retries
+    family: 0,             // support Railway's IPv6 private networking
+    maxRetriesPerRequest: 3,
+    enableOfflineQueue: false, // don't queue commands when disconnected
     retryStrategy: (times) => {
-      if (times > 5) return null;     // stop retrying after 5 attempts
+      if (times > 5) return null; // stop retrying after 5 attempts — null = disconnect
       return Math.min(times * 200, 2000);
     },
   });
