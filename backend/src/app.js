@@ -129,8 +129,10 @@ app.use(shrinkRay({
     return shrinkRay.filter(req, res);                         // default logic for the rest
   },
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+// Global JSON limit is intentionally small — file uploads use presigned S3 URLs
+// and never send large bodies through this API.
+app.use(express.json({ limit: '50kb' }));
+app.use(express.urlencoded({ extended: false, limit: '50kb' }));
 app.use(globalLimiter);
 
 // ─── Health check ────────────────────────────────────────────────

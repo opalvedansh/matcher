@@ -53,6 +53,8 @@ describe('Feed Routes', () => {
 
   describe('GET /api/feed', () => {
     it('should return scored feed results for a brand', async () => {
+      // Mock: algorithm_weights lookup (first DB call in getFeed)
+      db.query.mockResolvedValueOnce({ rows: [] });
       // Mock: self-profile lookup
       db.query.mockResolvedValueOnce({
         rows: [{ categories: ['tech'], budget_min: 1000, budget_max: 5000, location: 'Mumbai', lat: 19.07, lng: 72.87 }],
@@ -73,6 +75,8 @@ describe('Feed Routes', () => {
     });
 
     it('should respect the limit param', async () => {
+      // Mock: algorithm_weights lookup (first DB call in getFeed)
+      db.query.mockResolvedValueOnce({ rows: [] });
       db.query.mockResolvedValueOnce({
         rows: [{ categories: ['tech'], budget_min: 1000, budget_max: 5000, location: 'Mumbai', lat: null, lng: null }],
       });
@@ -87,6 +91,8 @@ describe('Feed Routes', () => {
     });
 
     it('should work for an influencer user', async () => {
+      // Mock: algorithm_weights lookup (first DB call in getFeed)
+      db.query.mockResolvedValueOnce({ rows: [] });
       db.query.mockResolvedValueOnce({
         rows: [{ categories: ['beauty'], price_min: 500, price_max: 2000, location: 'Delhi', lat: 28.61, lng: 77.20, platforms: ['instagram'] }],
       });

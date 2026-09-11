@@ -19,7 +19,7 @@ export default function Index() {
         return;
       }
 
-      if (user.email === 'fadedsukla572@gmail.com') {
+      if (user.is_admin === true) {
         router.replace('/(admin-tabs)/users');
         return;
       }

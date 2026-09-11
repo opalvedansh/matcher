@@ -17,7 +17,13 @@ jest.mock('../src/middleware/auth', () => ({
       banned: false,
     };
     next();
-  }
+  },
+  requireRole: (...roles) => (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  },
 }));
 
 // Mock Socket.io

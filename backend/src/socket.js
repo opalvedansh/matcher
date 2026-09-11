@@ -18,7 +18,18 @@ let io;
 function initSocket(server) {
   io = socketIo(server, {
     cors: {
-      origin: '*', // Adjust appropriately for production
+      // Mirror the same origin policy used by the Express CORS middleware.
+      // Native mobile clients send no Origin header and are always allowed.
+      origin: (origin, cb) => {
+        if (!origin) return cb(null, true); // native mobile / server-to-server
+        if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
+        const allowed = (process.env.ALLOWED_ORIGINS || '')
+          .split(',')
+          .map(o => o.trim())
+          .filter(Boolean);
+        if (allowed.includes(origin) || process.env.ALLOWED_ORIGINS === '*') return cb(null, true);
+        return cb(null, false);
+      },
       methods: ['GET', 'POST'],
       credentials: true
     },

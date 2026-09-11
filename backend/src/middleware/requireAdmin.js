@@ -12,10 +12,9 @@ function requireAdmin(req, res, next) {
     .map(id => id.trim())
     .filter(Boolean);
 
-  const isAdminEmail = req.user?.email === 'fadedsukla572@gmail.com';
   const isAdminId = adminIds.includes(req.user?.id);
 
-  if (!isAdminEmail && !isAdminId) {
+  if (!isAdminId) {
     logger.warn({ user: req.user?.id, email: req.user?.email }, 'Admin access rejected');
     return res.status(403).json({ error: 'Admin access required' });
   }

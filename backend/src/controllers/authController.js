@@ -70,7 +70,15 @@ async function me(req, res, next) {
       'SELECT id, email, role, created_at FROM users WHERE id = $1',
       [req.user.id]
     );
-    res.json(rows[0] || null);
+    const user = rows[0] || null;
+    if (user) {
+      const adminIds = (process.env.ADMIN_USER_IDS || '')
+        .split(',')
+        .map(id => id.trim())
+        .filter(Boolean);
+      user.is_admin = adminIds.includes(user.id);
+    }
+    res.json(user);
   } catch (err) {
     next(err);
   }

@@ -3,7 +3,7 @@ const validate  = require('../middleware/validate');
 const { authenticate } = require('../middleware/auth');
 const { syncUser, me, getOnboardingData, updateOnboardingData, updatePushToken } = require('../controllers/authController');
 const rateLimit = require('express-rate-limit');
-const RedisStore = require('rate-limit-redis');
+const { RedisStore } = require('rate-limit-redis');
 const redisClient = require('../config/redis');
 
 const router = require('express').Router();
@@ -14,7 +14,9 @@ const authLimiter = rateLimit({
   max: 20, // 20 requests per IP per window
   standardHeaders: true,
   legacyHeaders: false,
-  ...(redisClient ? {
+  // Only attach Redis store when the client actually supports raw command dispatch.
+  // ioredis-mock (used in tests) lacks .call(), so we skip Redis in that environment.
+  ...(redisClient && typeof redisClient.call === 'function' ? {
     store: new RedisStore({
       sendCommand: (...args) => redisClient.call(...args),
     }),
