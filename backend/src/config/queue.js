@@ -11,15 +11,17 @@ let pushWorker = null;
 
 if (hasRedis) {
   const { Queue, Worker } = require('bullmq');
-
-  const redisConfig = {
-    host: process.env.REDIS_HOST || '127.0.0.1',
-    port: process.env.REDIS_PORT || 6379,
-  };
+  const IORedis = require('ioredis');
+  
+  // BullMQ requires maxRetriesPerRequest: null, and passing a URL directly
+  // creates independent connections so workers don't block Express rate limiters.
+  const bullMqConnection = process.env.REDIS_URL 
+    ? new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
+    : new IORedis({ host: process.env.REDIS_HOST || '127.0.0.1', port: process.env.REDIS_PORT || 6379, maxRetriesPerRequest: null });
 
   // Queue for Push Notifications
   pushQueue = new Queue('PushNotifications', {
-    connection: redisConfig,
+    connection: bullMqConnection,
   });
 
   // Worker that processes the background jobs
@@ -51,7 +53,7 @@ if (hasRedis) {
       }
     },
     {
-      connection: redisConfig,
+      connection: bullMqConnection,
       concurrency: 5, // process up to 5 pushes concurrently
     }
   );
