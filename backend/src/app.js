@@ -161,7 +161,7 @@ app.use((_req, res) => res.status(404).json({ error: 'Route not found' }));
 
 // ─── Sentry error handler (before custom handler) ───────────────
 if (process.env.SENTRY_DSN) {
-  app.use(Sentry.setupExpressErrorHandler());
+  Sentry.setupExpressErrorHandler(app);
 }
 
 // ─── Central error handler (must be last) ────────────────────────

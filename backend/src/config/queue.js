@@ -16,8 +16,8 @@ if (hasRedis) {
   // BullMQ requires maxRetriesPerRequest: null, and passing a URL directly
   // creates independent connections so workers don't block Express rate limiters.
   const bullMqConnection = process.env.REDIS_URL 
-    ? new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
-    : new IORedis({ host: process.env.REDIS_HOST || '127.0.0.1', port: process.env.REDIS_PORT || 6379, maxRetriesPerRequest: null });
+    ? new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null, family: 0 })
+    : new IORedis({ host: process.env.REDIS_HOST || '127.0.0.1', port: process.env.REDIS_PORT || 6379, maxRetriesPerRequest: null, family: 0 });
 
   // Queue for Push Notifications
   pushQueue = new Queue('PushNotifications', {

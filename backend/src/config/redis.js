@@ -15,9 +15,8 @@ if (process.env.NODE_ENV === 'test') {
   redisClient = new Redis();
 } else if (shouldUseRedis) {
   const Redis = require('ioredis');
-  redisClient = new Redis(process.env.REDIS_URL || {
-    host: process.env.REDIS_HOST || '127.0.0.1',
-    port: process.env.REDIS_PORT || 6379,
+  redisClient = new Redis(process.env.REDIS_URL, {
+    family: 0, // Railway internal networking requires IPv6 (family 0 allows both IPv4 and IPv6)
     maxRetriesPerRequest: 3,          // fail fast instead of 20 retries
     retryStrategy: (times) => {
       if (times > 5) return null;     // stop retrying after 5 attempts
