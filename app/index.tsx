@@ -19,7 +19,7 @@ export default function Index() {
         return;
       }
 
-      if (user.is_admin === true) {
+      if ((user as any).is_admin === true) {
         router.replace('/(admin-tabs)/users');
         return;
       }

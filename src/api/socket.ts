@@ -17,7 +17,7 @@ function getBaseUrl(): string {
     const host = debuggerHost?.split(':')[0] ?? 'localhost';
     return `http://${host}:4000`;
   }
-  return 'https://mymatcher-production.up.railway.app';
+  return 'https://api.mymatchr.in';
 }
 
 const SOCKET_URL = getBaseUrl();

@@ -69,6 +69,10 @@ interface AuthContextType {
   signInWithApple: () => Promise<void>;
   signInWithLinkedIn: () => Promise<void>;
   signOut: () => Promise<void>;
+  // Email verification methods
+  verifyOtpCode: (email: string, otp: string) => Promise<void>;
+  resendOtp: (email: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   // Onboarding methods
   updateOnboarding: (data: Partial<OnboardingData>) => Promise<void>;
   completeOnboarding: () => Promise<void>;
@@ -173,6 +177,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUpWithEmail = async (email: string, password: string) => {
     const { error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+  };
+
+  // Verify the 6-digit OTP code sent to the user's email after signup
+  const verifyOtpCode = async (email: string, otp: string) => {
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: otp,
+      type: 'email',
+    });
+    if (error) throw error;
+    // onAuthStateChange fires automatically on success, creating the session
+  };
+
+  // Resend the OTP verification email (e.g. if user didn't receive it)
+  const resendOtp = async (email: string) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+    });
+    if (error) throw error;
+  };
+
+  // Send a password reset link to the given email address
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
     if (error) throw error;
   };
 
@@ -407,6 +437,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithApple,
         signInWithLinkedIn,
         signOut,
+        verifyOtpCode,
+        resendOtp,
+        resetPassword,
         updateOnboarding,
         completeOnboarding,
       }}
